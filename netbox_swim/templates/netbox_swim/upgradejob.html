@@ -1,0 +1,98 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block control_buttons %}
+{% if object.status == 'pending' or object.status == 'failed' %}
+<form method="post" action="{% url 'plugins:netbox_swim:upgradejob_execute' pk=object.pk %}" style="display: inline-block;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-primary">
+        <i class="mdi mdi-play"></i> Start Upgrade
+    </button>
+</form>
+{% endif %}
+{% endblock control_buttons %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Upgrade Job</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Device</th>
+                        <td>{{ object.device|linkify }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Target Image</th>
+                        <td>{{ object.target_image|linkify|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Workflow Template</th>
+                        <td>{{ object.template|linkify|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td>
+                            {% if object.status == 'completed' %}
+                                <span class="badge text-bg-success">{{ object.get_status_display }}</span>
+                            {% elif object.status == 'failed' or object.status == 'cancelled' %}
+                                <span class="badge text-bg-danger">{{ object.get_status_display }}</span>
+                            {% elif object.status == 'pending' or object.status == 'scheduled' %}
+                                <span class="badge text-bg-info">{{ object.get_status_display }}</span>
+                            {% else %}
+                                <span class="badge text-bg-warning">{{ object.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Scheduled For</th>
+                        <td>{{ object.scheduled_time|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Started</th>
+                        <td>{{ object.start_time|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Ended</th>
+                        <td>{{ object.end_time|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Job Logs</h5>
+            <div class="card-body">
+                {% if object.logs.all %}
+                <div class="accordion" id="logAccordion">
+                    {% for log in object.logs.all reversed %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ log.pk }}">
+                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ log.pk }}">
+                                <strong>{{ log.get_action_type_display }}</strong> &nbsp;-&nbsp; 
+                                {% if log.is_success %}
+                                    <span class="badge text-bg-success ms-2">Pass</span>
+                                {% else %}
+                                    <span class="badge text-bg-danger ms-2">Fail</span>
+                                {% endif %}
+                                <span class="ms-auto text-muted small">{{ log.timestamp|date:"H:i:s" }}</span>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ log.pk }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" data-bs-parent="#logAccordion">
+                            <div class="accordion-body bg-dark text-light p-3" style="font-family: monospace; white-space: pre-wrap; font-size: 0.85rem;">{{ log.log_output|default:"No output" }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <span class="text-muted">No logs yet. Job has not been executed.</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

@@ -1,0 +1,97 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Workflow Template</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Is Active</th>
+                        <td>{% if object.is_active %}<span class="badge text-bg-success">Yes</span>{% else %}<span class="badge text-bg-danger">No</span>{% endif %}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.description %}
+        <div class="card">
+            <h5 class="card-header">Description</h5>
+            <div class="card-body">{{ object.description }}</div>
+        </div>
+        {% endif %}
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Workflow Steps</h5>
+            <div class="card-body">
+                <div class="mb-3 text-end">
+                    <a href="{% url 'plugins:netbox_swim:workflowstep_add' %}?template={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-sm btn-primary">
+                        <i class="mdi mdi-plus"></i> Add Step
+                    </a>
+                </div>
+                {% if object.steps.all %}
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Order</th>
+                            <th>Action Type</th>
+                            <th>Step Details</th>
+                            <th>Driver</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for step in object.steps.all %}
+                        <tr>
+                            <td>{{ step.order }}</td>
+                            <td>{{ step.get_action_type_display }}</td>
+                            <td>
+                                {% if step.action_type == 'wait' and step.extra_config.duration %}
+                                    ⏳ Wait {{ step.extra_config.duration }}s
+                                {% elif step.action_type == 'ping' %}
+                                    {% if step.extra_config.target_ip %}
+                                        🏓 Ping: {{ step.extra_config.target_ip }}
+                                    {% else %}
+                                        🏓 Ping: Native Primary IP
+                                    {% endif %}
+                                {% elif step.action_type == 'precheck' or step.action_type == 'postcheck' %}
+                                    {% if step.extra_config.check_template_id %}
+                                        🔍 Checks: Template ID {{ step.extra_config.check_template_id }}
+                                    {% else %}
+                                        🔍 Checks: None Selected
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if step.extra_config.connection_library %}
+                                    <span class="badge text-bg-info">{{ step.extra_config.connection_library }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary">Auto</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'plugins:netbox_swim:workflowstep_edit' step.pk %}?return_url={{ object.get_absolute_url }}" class="btn btn-sm btn-warning">Edit</a>
+                                <a href="{% url 'plugins:netbox_swim:workflowstep_delete' step.pk %}?return_url={{ object.get_absolute_url }}" class="btn btn-sm btn-danger">Delete</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <span class="text-muted">No steps defined for this template.</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

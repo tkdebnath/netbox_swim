@@ -1,0 +1,169 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block extra_buttons %}
+{% if object.status == 'pending' or object.status == 'running' or object.status == 'scheduled' %}
+<form method="post" action="{% url 'plugins:netbox_swim:syncjob_cancel' pk=object.pk %}" style="display: inline-block;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-danger">
+        <i class="mdi mdi-cancel"></i> Cancel Job
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Job Overview</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td><span class="badge {% if object.status == 'completed' %}bg-success{% elif object.status == 'failed' %}bg-danger{% else %}bg-primary{% endif %}">{{ object.status }}</span></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Start Time</th>
+                        <td>{{ object.start_time }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">End Time</th>
+                        <td>{{ object.end_time|default:"In Progress" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Library Used</th>
+                        <td>{{ object.connection_library }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <h5 class="card-header">Activity Stats</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Selected Count</th>
+                        <td>{{ object.selected_device_count }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Failed Count</th>
+                        <td class="text-danger">{{ object.failed_device_count }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Concurrency Limit</th>
+                        <td>{{ object.max_concurrency }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col col-md-8">
+<div class="row">
+    <div class="col col-md-12 mb-3">
+        <div class="card">
+            <h5 class="card-header">Processing Log Summary</h5>
+            <div class="card-body bg-dark text-light p-3" style="border-radius: 4px; font-family: monospace; max-height: 250px; overflow-y: auto;">
+                {% if object.summary_logs %}
+                    {% for msg in object.summary_logs %}
+                        <div class="mb-1">{{ msg }}</div>
+                    {% endfor %}
+                {% else %}
+                    <em class="text-muted">No summary logs captured yet.</em>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">Individual Device Results</h5>
+            <div class="card-body p-0">
+                <form action="{% url 'plugins:netbox_swim:devicesyncrecord_bulk_approve' %}" method="post">
+                    {% csrf_token %}
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAllRecords"></th>
+                                <th>Device</th>
+                                <th>Live Device Facts</th>
+                                <th>Old NetBox Values</th>
+                                <th>New Discovered Diff</th>
+                                <th>Status Flag</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in object.device_records.all %}
+                            <tr>
+                                <td>
+                                    {% if record.status == 'pending' %}
+                                        <input type="checkbox" name="pk" value="{{ record.pk }}" class="record-checkbox">
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td><a href="{{ record.device.get_absolute_url }}"><strong>{{ record.device }}</strong></a></td>
+                                <td>
+                                    {% if record.live_facts %}
+                                        {% for key, val in record.live_facts.items %}
+                                            {% if val %}
+                                            <span class="badge bg-light text-dark mb-1 border">{{ key }}</span> <span class="text-secondary small">{{ val }}</span><br>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted small">No data gathered</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if record.detected_diff %}
+                                        {% for key, val in record.detected_diff.items %}
+                                            <span class="badge bg-light text-dark mb-1 border">{{ key }}</span> <span class="text-danger small fw-bold">{{ val.old|default:"None" }}</span><br>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-success small fw-bold">✓ Matches Live</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if record.detected_diff %}
+                                        {% for key, val in record.detected_diff.items %}
+                                            <span class="badge bg-light text-dark mb-1 border">{{ key }}</span> <span class="text-success small fw-bold">{{ val.new|default:"None" }}</span><br>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {% if record.status == 'pending' %}bg-warning text-dark{% elif record.status == 'applied' or record.status == 'auto_applied' %}bg-success text-white{% elif record.status == 'failed' %}bg-danger text-white{% elif record.status == 'no_change' %}bg-secondary text-white{% else %}bg-primary text-white{% endif %} py-1 px-2 border">{{ record.get_status_display }}</span>
+                                </td>
+                                <td><a href="{{ record.get_absolute_url }}" class="btn btn-sm btn-outline-primary">View Record</a></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-3">No device records found yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="p-3 bg-light border-top">
+                        <button type="submit" class="btn btn-sm btn-success">
+                            <i class="mdi mdi-check-all"></i> Approve Selected
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <script>
+            document.getElementById('selectAllRecords').addEventListener('change', function(e) {
+                var checkboxes = document.querySelectorAll('.record-checkbox');
+                for (var i = 0; i < checkboxes.length; i++) {
+                    checkboxes[i].checked = e.target.checked;
+                }
+            });
+            </script>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+
+{% block title %}SWIM Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header text-bg-primary">
+                <i class="mdi mdi-cloud-download"></i> SWIM - Software Image Management
+            </h5>
+            <div class="card-body">
+                <p>Welcome to the SWIM Engine Dashboard. Monitor your Golden Image deployments, track fleet compliance, and manage automated upgrade workflows.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Inventory</h5>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Software Images</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:softwareimage_list' %}">{{ software_images_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">File Servers</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:fileserver_list' %}">{{ file_server_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Hardware Groups</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:hardwaregroup_list' %}">{{ hardware_group_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="fw-bold">Golden Images</span>
+                    <a class="badge bg-primary" href="{% url 'plugins:netbox_swim:goldenimage_list' %}">{{ golden_image_count }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Fleet Compliance</h5>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-success fw-bold"><i class="mdi mdi-check-circle"></i> Compliant</span>
+                    <a class="badge bg-success" href="{% url 'plugins:netbox_swim:devicecompliance_list' %}?status=compliant">{{ compliant_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-danger fw-bold"><i class="mdi mdi-alert-circle"></i> Non-Compliant</span>
+                    <a class="badge bg-danger" href="{% url 'plugins:netbox_swim:devicecompliance_list' %}?status=non_compliant">{{ non_compliant_count }}</a>
+                </div>
+                <div class="mt-4">
+                    <a href="{% url 'plugins:netbox_swim:device_bulk_sync' %}" class="btn btn-outline-info w-100 mb-2">Run Fleet Sync</a>
+                    <a href="{% url 'plugins:netbox_swim:device_bulk_upgrade' %}" class="btn btn-primary w-100">Schedule Upgrades</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Execution Metrics</h5>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Upgrade Jobs</span>
+                    <a class="badge bg-warning" href="{% url 'plugins:netbox_swim:upgradejob_list' %}">{{ upgrade_jobs_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Sync Jobs</span>
+                    <a class="badge bg-info" href="{% url 'plugins:netbox_swim:syncjob_list' %}">{{ sync_jobs_count }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

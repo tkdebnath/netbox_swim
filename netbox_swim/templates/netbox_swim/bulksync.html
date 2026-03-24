@@ -1,0 +1,25 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+{% load form_helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <form action="." method="post" class="form form-horizontal">
+            {% csrf_token %}
+            <div class="card">
+                <div class="card-header">
+                    <strong>Bulk Device Synchronization</strong>
+                </div>
+                <div class="card-body">
+                    {% render_form form %}
+                </div>
+                <div class="card-footer text-end">
+                    <a href="{% url 'plugins:netbox_swim:hardwaregroup_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary bg-primary">Queue Sync Jobs</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

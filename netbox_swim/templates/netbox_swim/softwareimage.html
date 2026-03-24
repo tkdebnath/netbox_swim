@@ -1,0 +1,88 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Software Image Details</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Image Name</th>
+                        <td>{{ object.image_name }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Platform</th>
+                        <td>{{ object.platform|linkify }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Version</th>
+                        <td>{{ object.version }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Image Type</th>
+                        <td>{{ object.get_image_type_display }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Filename</th>
+                        <td><code>{{ object.image_file_name }}</code></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">File Size</th>
+                        <td>{{ object.file_size_display }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Release Notes</th>
+                        <td>{% if object.release_notes_url %}<a href="{{ object.release_notes_url }}" target="_blank">{{ object.release_notes_url }}</a>{% else %}—{% endif %}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <h5 class="card-header">Device Requirements</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Min RAM (MB)</th>
+                        <td>{{ object.min_ram_mb|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Min Flash (MB)</th>
+                        <td>{{ object.min_flash_mb|default:"—" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Security Hashes</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">MD5</th>
+                        <td><code>{{ object.hash_md5|default:"—" }}</code></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SHA-256</th>
+                        <td><code>{{ object.hash_sha256|default:"—" }}</code></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SHA-512</th>
+                        <td><code>{{ object.hash_sha512|default:"—" }}</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.description %}
+        <div class="card">
+            <h5 class="card-header">Description</h5>
+            <div class="card-body">{{ object.description }}</div>
+        </div>
+        {% endif %}
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+</div>
+{% endblock content %}

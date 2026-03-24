@@ -1,0 +1,119 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Hardware Group Details</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Slug</th>
+                        <td>{{ object.slug }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Deployment Mode</th>
+                        <td>{{ object.get_deployment_mode_display }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Version Range</th>
+                        <td>
+                            {% if object.min_version or object.max_version %}
+                                {{ object.min_version|default:"Any" }} - {{ object.max_version|default:"Any" }}
+                            {% else %}
+                                All Versions
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.description %}
+        <div class="card">
+            <h5 class="card-header">Description</h5>
+            <div class="card-body">{{ object.description }}</div>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <h5 class="card-header">Target Golden Images</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th>Deployment Mode</th>
+                        <th>Target Firmware Image</th>
+                    </tr>
+                    {% for golden in object.golden_images.all %}
+                        <tr>
+                            <td>{{ golden.get_deployment_mode_display }}</td>
+                            <td><a href="{{ golden.image.get_absolute_url }}">{{ golden.image.image_name }}</a></td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-muted">No Golden Images assigned to this Hardware Group.</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h5 class="card-header">Compatible Software Images</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th>Version</th>
+                        <th>Target Firmware Image</th>
+                    </tr>
+                    {% for image in object.software_images.all %}
+                        <tr>
+                            <td>{{ image.version }}</td>
+                            <td><a href="{{ image.get_absolute_url }}">{{ image.image_name }}</a></td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-muted">No compatible Standard Images assigned directly to this Hardware Group.</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Hardware Criteria</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Platforms</th>
+                        <td>
+                            {% for platform in object.platforms.all %}
+                                {{ platform|linkify }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                <span class="text-muted">Any Platform</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Device Types</th>
+                        <td>
+                            {% for dt in object.device_types.all %}
+                                {{ dt|linkify }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                <span class="text-muted">Any Device Type</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+</div>
+{% endblock content %}

@@ -1,0 +1,44 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col col-md-12">
+        <h2>Bulk Auto-Remediation (Firmware Upgrades)</h2>
+        <p class="text-muted">Evaluates all selected devices against their matched Golden Images and Workflow Templates, immediately spawning asynchronous Upgrade Jobs for each one if they are Non-Compliant.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Target Devices & Filters</h5>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn btn-primary mt-3">
+                        <i class="mdi mdi-play-circle"></i> Execute Upgrades
+                    </button>
+                    <a href="{% url 'plugins:netbox_swim:upgradejob_list' %}" class="btn btn-outline-secondary mt-3 ms-2">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col col-md-6">
+        <div class="card border-info">
+            <h5 class="card-header text-bg-info">Execution Routing</h5>
+            <div class="card-body">
+                <p>The system will process each device and execute them in parallel if they possess:</p>
+                <ul>
+                    <li>An IP Address for SSH connections</li>
+                    <li>A structurally bound Hardware Group</li>
+                    <li>A bound Workflow Template tied to that Group</li>
+                    <li>A valid Target Golden Image</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

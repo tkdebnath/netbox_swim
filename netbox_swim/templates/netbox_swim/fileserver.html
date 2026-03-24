@@ -1,0 +1,87 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">File Server Details</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Protocol</th>
+                        <td>{{ object.get_protocol_display }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">IP Address / Hostname</th>
+                        <td>{{ object.ip_address }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Port</th>
+                        <td>{{ object.port|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Username</th>
+                        <td>{{ object.username|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Base path</th>
+                        <td><code>{{ object.base_path|default:"/" }}</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.description %}
+        <div class="card">
+            <h5 class="card-header">Description</h5>
+            <div class="card-body">{{ object.description }}</div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Network Hierarchy Mapping</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Regions</th>
+                        <td>
+                            {% for region in object.regions.all %}
+                                {{ region|linkify }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                <span class="text-muted">No regions mapped</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Sites</th>
+                        <td>
+                            {% for site in object.sites.all %}
+                                {{ site|linkify }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                <span class="text-muted">No sites mapped</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Devices</th>
+                        <td>
+                            {% for device in object.devices.all %}
+                                {{ device|linkify }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                <span class="text-muted">No devices mapped</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+</div>
+{% endblock content %}

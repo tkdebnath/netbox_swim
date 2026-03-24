@@ -1,0 +1,59 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Check Template</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.description %}
+        <div class="card">
+            <h5 class="card-header">Description</h5>
+            <div class="card-body">{{ object.description }}</div>
+        </div>
+        {% endif %}
+        {% include 'inc/panels/custom_fields.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Associated Checks</h5>
+            <div class="card-body">
+                {% if object.checks.all %}
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Check Name</th>
+                            <th>Category</th>
+                            <th>Phase</th>
+                            <th>Command/Feature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for check in object.checks.all %}
+                        <tr>
+                            <td><a href="{{ check.get_absolute_url }}">{{ check.name }}</a></td>
+                            <td>{{ check.get_category_display }}</td>
+                            <td>{{ check.get_phase_display }}</td>
+                            <td><code>{{ check.command }}</code></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <span class="text-muted">No checks assigned to this template.</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

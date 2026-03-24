@@ -1,0 +1,85 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Sync Record Details</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Device</th>
+                        <td><a href="{{ object.device.get_absolute_url }}">{{ object.device }}</a></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td><span class="badge {% if object.status == 'pending' %}bg-warning text-dark{% elif object.status == 'applied' %}bg-success{% elif object.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ object.get_status_display }}</span></td>
+                    </tr>
+                    {% if object.sync_job %}
+                    <tr>
+                        <th scope="row">Sync Job</th>
+                        <td><a href="{{ object.sync_job.get_absolute_url }}">{{ object.sync_job }}</a></td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th scope="row">Created</th>
+                        <td>{{ object.created }}</td>
+                    </tr>
+                </table>
+            </div>
+            {% if object.status == 'pending' %}
+            <div class="card-footer text-end">
+                <form action="{% url 'plugins:netbox_swim:devicesyncrecord_approve' pk=object.pk %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success">
+                        <i class="mdi mdi-check"></i> Approve & Apply Changes
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col col-md-8">
+        <div class="card">
+            <h5 class="card-header">Detected Configuration Drift</h5>
+            <div class="card-body">
+                {% if object.detected_diff %}
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Field</th>
+                            <th>Current (NetBox)</th>
+                            <th>Detected (Live Device)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for field, values in object.detected_diff.items %}
+                        <tr>
+                            <td><strong>{{ field|title }}</strong></td>
+                            <td class="text-danger">{{ values.old }}</td>
+                            <td class="text-success">{{ values.new }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted">No configuration drift detected.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card mt-3">
+            <h5 class="card-header">Connection & Processing Logs</h5>
+            <div class="card-body bg-dark text-light p-3" style="border-radius: 4px; font-family: monospace; max-height: 400px; overflow-y: auto;">
+                {% if object.log_messages %}
+                    {% for msg in object.log_messages %}
+                        <div class="mb-1">{{ msg }}</div>
+                    {% endfor %}
+                {% else %}
+                    <em class="text-muted">No log messages captured.</em>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

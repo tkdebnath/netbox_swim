@@ -1,0 +1,52 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Device Compliance</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Device</th>
+                        <td>{{ object.device|linkify }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td>
+                            {% if object.status == 'compliant' %}
+                                <span class="badge text-bg-success">Compliant</span>
+                            {% elif object.status == 'non_compliant' %}
+                                <span class="badge text-bg-danger">Non-Compliant</span>
+                            {% elif object.status == 'error' %}
+                                <span class="badge text-bg-warning">Error</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Unknown</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Current Version</th>
+                        <td>{{ object.current_version|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Expected Version (Golden)</th>
+                        <td>{{ object.expected_version|default:"—" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Last Checked</th>
+                        <td>{{ object.last_checked|default:"Never" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% if object.detail %}
+        <div class="card">
+            <h5 class="card-header">Details</h5>
+            <div class="card-body"><pre>{{ object.detail }}</pre></div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock content %}
