@@ -1,0 +1,89 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-5">
+        <div class="card">
+            <h5 class="card-header">Job Log Entry</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Upgrade Job</th>
+                        <td><a href="{{ object.job.get_absolute_url }}">{{ object.job }}</a></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Device</th>
+                        <td><a href="{{ object.job.device.get_absolute_url }}">{{ object.job.device }}</a></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Action Type</th>
+                        <td><span class="badge bg-primary">{{ object.action_type }}</span></td>
+                    </tr>
+                    {% if object.step %}
+                    <tr>
+                        <th scope="row">Step</th>
+                        <td>{{ object.step }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th scope="row">Result</th>
+                        <td>
+                            {% if object.is_success %}
+                                <span class="badge bg-success"><i class="mdi mdi-check-circle"></i> Success</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="mdi mdi-close-circle"></i> Failed</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Timestamp</th>
+                        <td>{{ object.timestamp }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% include 'inc/panels/tags.html' %}
+    </div>
+    <div class="col col-md-7">
+        <div class="card">
+            <h5 class="card-header">Execution Output</h5>
+            <div class="card-body p-0">
+                {% if object.log_output %}
+                <div class="bg-dark text-light p-3" style="border-radius: 0 0 4px 4px; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.7; max-height: 600px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">{{ object.log_output }}</div>
+                {% else %}
+                <div class="p-3">
+                    <span class="text-muted">No output captured for this log entry.</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if object.job.target_image %}
+        <div class="card mt-3">
+            <h5 class="card-header">Related Context</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Target Image</th>
+                        <td><a href="{{ object.job.target_image.get_absolute_url }}">{{ object.job.target_image }}</a></td>
+                    </tr>
+                    {% if object.job.template %}
+                    <tr>
+                        <th scope="row">Workflow Template</th>
+                        <td><a href="{{ object.job.template.get_absolute_url }}">{{ object.job.template }}</a></td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th scope="row">Job Status</th>
+                        <td>
+                            <span class="badge {% if object.job.status == 'completed' %}bg-success{% elif object.job.status == 'failed' %}bg-danger{% elif object.job.status == 'running' %}bg-primary{% else %}bg-secondary{% endif %}">{{ object.job.get_status_display }}</span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock content %}

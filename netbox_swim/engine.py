@@ -23,16 +23,17 @@ logger.info("SWIM Engine initialized.")
 # Background Worker Task
 # ============================================================
 
-def _log(job_obj, action_type, result, message):
+def _log(job_obj, action_type, is_success=True, log_output='', step=None):
     """Helper to create a JobLog entry."""
     JobLog.objects.create(
         job=job_obj,
         action_type=action_type,
-        result=result,
-        message=message,
+        is_success=is_success,
+        log_output=log_output,
+        step=step,
     )
-    level = logging.INFO if result in ('pass', 'info') else logging.ERROR
-    logger.log(level, f"Job {job_obj.id} | {action_type} | [{result}] {message}")
+    level = logging.INFO if is_success else logging.ERROR
+    logger.log(level, f"Job {job_obj.id} | {action_type} | {'✓' if is_success else '✗'} {log_output[:200]}")
 
 
 # ============================================================
@@ -211,10 +212,14 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
 
 
 @job('default')
-def execute_bulk_remediation(device_ids, connection_library='auto', dry_run=False, mock_run=False):
+def execute_bulk_remediation(device_ids, connection_library='auto', dry_run=False, mock_run=False, scheduled_time=None):
     """
     Spawns background jobs to process all devices in the provided list.
     Evaluates Hardware Groups to find the correct Workflow Template.
+    
+    If scheduled_time is provided (a datetime), UpgradeJobs are created with
+    status='scheduled' and execution is deferred to that time using django-rq's
+    scheduler.enqueue_at().
     """
     # Iterates through device IDs, matches them against HardwareGroups,
     # finds the correct GoldenImage + WorkflowTemplate, and spawns an UpgradeJob for each.
@@ -226,6 +231,7 @@ def execute_bulk_remediation(device_ids, connection_library='auto', dry_run=Fals
     queued = 0
     skipped = 0
     successful_spawns = 0
+    is_scheduled = scheduled_time is not None
     
     devices = Device.objects.filter(id__in=device_ids)
     
@@ -262,28 +268,55 @@ def execute_bulk_remediation(device_ids, connection_library='auto', dry_run=Fals
         target_image = golden.image
         
         # 4. Create the UpgradeJob record
-        enqueue_job = True
         priority_str = connection_library if connection_library != 'auto' else matched_hg.connection_priority
         
-        if enqueue_job:
-            upgrade = UpgradeJob.objects.create(
-                device=device,
-                target_image=golden.image,
-                template=matched_hg.workflow_template,
-                status='pending',
-                extra_config={'connection_priority': priority_str, 'dry_run': dry_run, 'mock_run': mock_run}
+        initial_status = 'scheduled' if is_scheduled else 'pending'
+        
+        upgrade = UpgradeJob.objects.create(
+            device=device,
+            target_image=golden.image,
+            template=matched_hg.workflow_template,
+            status=initial_status,
+            scheduled_time=scheduled_time,
+            extra_config={'connection_priority': priority_str, 'dry_run': dry_run, 'mock_run': mock_run}
+        )
+        
+        # 5. Enqueue or Schedule the execution
+        if is_scheduled:
+            # Use django-rq scheduler for deferred execution
+            scheduler = django_rq.get_scheduler('default')
+            scheduler.enqueue_at(
+                scheduled_time,
+                execute_upgrade_job,
+                upgrade.id,
+                dry_run=dry_run,
+                mock_run=mock_run,
             )
-            
+            upgrade.job_log.append({
+                "time": timezone.now().isoformat(),
+                "level": "info",
+                "message": f"Job scheduled for maintenance window: {scheduled_time.strftime('%Y-%m-%d %H:%M %Z')}. Execution will begin automatically at the scheduled time."
+            })
+            logger.info(f"[Bulk Remediation] Scheduled UpgradeJob #{upgrade.id} for {device.name} at {scheduled_time}")
+        else:
+            # Immediate execution
             django_rq.enqueue(execute_upgrade_job, upgrade.id, dry_run=dry_run, mock_run=mock_run)
-            successful_spawns += 1
-            upgrade.job_log.append({"time": timezone.now().isoformat(), "level": "info", "message": f"Successfully validated Hardware Group compliance. Auto-Remediation Workflow started."})
-            if dry_run or mock_run:
-                upgrade.job_log.append({"time": timezone.now().isoformat(), "level": "info", "message": f"Execution mode active. Dry Run: {dry_run}, Mock: {mock_run}."})
-            upgrade.save()
-            queued += 1
+            upgrade.job_log.append({
+                "time": timezone.now().isoformat(),
+                "level": "info",
+                "message": f"Successfully validated Hardware Group compliance. Auto-Remediation Workflow started."
+            })
             logger.info(f"[Bulk Remediation] Spawning background worker UpgradeJob #{upgrade.id} for {device.name}")
         
-    return f"Successfully spun up {queued} upgrade queues. Skipped {skipped} devices."
+        if dry_run or mock_run:
+            upgrade.job_log.append({"time": timezone.now().isoformat(), "level": "info", "message": f"Execution mode active. Dry Run: {dry_run}, Mock: {mock_run}."})
+        
+        upgrade.save()
+        successful_spawns += 1
+        queued += 1
+        
+    action_word = "scheduled" if is_scheduled else "spun up"
+    return f"Successfully {action_word} {queued} upgrade queues. Skipped {skipped} devices."
 
 def _create_aborted_job(device, reason, detailed_message):
     from .models import UpgradeJob, JobLog
@@ -600,14 +633,17 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
             break
 
     # Finalize Job and Generate Zip Payload
-    if overall_success:
-        try:
-            report_url = _generate_genie_diff_archive(upgrade)
-            if report_url:
-                upgrade.extra_config['diff_report_url'] = report_url
-                upgrade.job_log.append({"time": timezone.now().isoformat(), "level": "info", "message": f"Diff Report generated successfully: {report_url}"})
-        except Exception as e:
-            logger.error(f"Failed to compile Diff Archive for {upgrade.id}: {str(e)}")
+    try:
+        archive_meta = _generate_checks_archive(upgrade)
+        if archive_meta:
+            upgrade.extra_config['checks_archive'] = archive_meta
+            upgrade.job_log.append({
+                "time": timezone.now().isoformat(),
+                "level": "info",
+                "message": f"Checks archive generated: {archive_meta['filename']}"
+            })
+    except Exception as e:
+        logger.error(f"Failed to compile Checks Archive for {upgrade.id}: {str(e)}")
             
     upgrade.status = 'completed' if overall_success else 'failed'
     upgrade.end_time = timezone.now()
@@ -615,7 +651,12 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
     
     return upgrade.status
 
-def _generate_genie_diff_archive(job):
+
+def _generate_checks_archive(job):
+    """
+    Generates a ZIP archive containing precheck/, postcheck/, and diffs/ folders.
+    Archive name: <devicename>_checks_<ddmmyy>.zip
+    """
     import os
     import shutil
     import subprocess
@@ -628,32 +669,98 @@ def _generate_genie_diff_archive(job):
     post_dir = os.path.join(job_dir, 'postcheck')
     diff_dir = os.path.join(job_dir, 'diffs')
     
-    # Needs to exist to compare
-    if not os.path.exists(pre_dir) or not os.path.exists(post_dir):
-        return None
-        
-    os.makedirs(diff_dir, exist_ok=True)
+    # At least one of pre/post must exist
+    has_pre = os.path.exists(pre_dir)
+    has_post = os.path.exists(post_dir)
     
-    cmd = ["genie", "diff", pre_dir, post_dir, "--output", diff_dir]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.stdout:
-            with open(os.path.join(diff_dir, 'summary.log'), 'w') as f:
-                f.write(result.stdout)
-    except Exception as e:
-        logger.warning(f"Genie diff CLI failed: {str(e)}")
-        
-    archive_base = os.path.join(base_media, 'swim', 'checks', f'job_{job.id}_diff_report')
+    if not has_pre and not has_post:
+        return None
+    
+    # Run Genie diff if both pre and post exist
+    if has_pre and has_post:
+        os.makedirs(diff_dir, exist_ok=True)
+        cmd = ["genie", "diff", pre_dir, post_dir, "--output", diff_dir]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.stdout:
+                with open(os.path.join(diff_dir, 'summary.log'), 'w') as f:
+                    f.write(result.stdout)
+            if result.stderr:
+                with open(os.path.join(diff_dir, 'errors.log'), 'w') as f:
+                    f.write(result.stderr)
+        except Exception as e:
+            logger.warning(f"Genie diff CLI failed: {str(e)}")
+            # Write a fallback diff using Python's difflib
+            _generate_fallback_diff(pre_dir, post_dir, diff_dir)
+    
+    # Build archive name: devicename_checks_ddmmyy.zip
+    device_name = job.device.name or f"device_{job.device.pk}"
+    # Sanitize device name for filesystem
+    safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in device_name)
+    date_str = (job.end_time or job.start_time or timezone.now()).strftime('%d%m%y')
+    archive_filename = f"{safe_name}_checks_{date_str}"
+    
+    archive_base = os.path.join(base_media, 'swim', 'checks', archive_filename)
     shutil.make_archive(archive_base, 'zip', job_dir)
     
-    # Return relative URL that Django /media/ can serve
     media_url = getattr(settings, 'MEDIA_URL', '/media/')
-    return f"{media_url}swim/checks/job_{job.id}_diff_report.zip"           
+    return {
+        'filename': f"{archive_filename}.zip",
+        'url': f"{media_url}swim/checks/{archive_filename}.zip",
+        'job_dir': job_dir,
+        'has_precheck': has_pre,
+        'has_postcheck': has_post,
+        'has_diffs': os.path.exists(diff_dir) and len(os.listdir(diff_dir)) > 0,
+    }
+
+
+def _generate_fallback_diff(pre_dir, post_dir, diff_dir):
+    """Fallback diffing using Python's difflib when Genie CLI is not available."""
+    import os
+    import difflib
+    
+    pre_files = set(os.listdir(pre_dir)) if os.path.exists(pre_dir) else set()
+    post_files = set(os.listdir(post_dir)) if os.path.exists(post_dir) else set()
+    common = pre_files & post_files
+    
+    summary_lines = []
+    for fname in sorted(common):
+        pre_path = os.path.join(pre_dir, fname)
+        post_path = os.path.join(post_dir, fname)
+        
+        with open(pre_path, 'r', errors='replace') as f:
+            pre_lines = f.readlines()
+        with open(post_path, 'r', errors='replace') as f:
+            post_lines = f.readlines()
+        
+        diff = list(difflib.unified_diff(
+            pre_lines, post_lines,
+            fromfile=f'precheck/{fname}',
+            tofile=f'postcheck/{fname}',
+            n=3
+        ))
+        
+        if diff:
+            diff_path = os.path.join(diff_dir, f"diff_{fname}")
+            with open(diff_path, 'w') as f:
+                f.writelines(diff)
+            summary_lines.append(f"CHANGED: {fname} ({len(diff)} diff lines)")
+        else:
+            summary_lines.append(f"IDENTICAL: {fname}")
+    
+    for fname in sorted(pre_files - post_files):
+        summary_lines.append(f"REMOVED (post-upgrade): {fname}")
+    for fname in sorted(post_files - pre_files):
+        summary_lines.append(f"NEW (post-upgrade): {fname}")
+    
+    with open(os.path.join(diff_dir, 'summary.log'), 'w') as f:
+        f.write("=== Python difflib Fallback Comparison ===\n\n")
+        f.write("\n".join(summary_lines))           
 
 def _fail_job(upgrade_job, reason):
     """Mark a job as failed and log the reason."""
     upgrade_job.status = UpgradeJob.StatusChoices.FAILED
     upgrade_job.end_time = timezone.now()
     upgrade_job.save()
-    _log(upgrade_job, 'workflow', 'fail', reason)
+    _log(upgrade_job, 'workflow', is_success=False, log_output=reason)
     logger.error(f"Upgrade job {upgrade_job.id} failed: {reason}")

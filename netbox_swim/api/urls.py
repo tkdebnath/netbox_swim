@@ -1,4 +1,5 @@
 from netbox.api.routers import NetBoxRouter
+from django.urls import path
 from . import views
 
 router = NetBoxRouter()
@@ -16,4 +17,6 @@ router.register('sync-records', views.DeviceSyncRecordViewSet)
 router.register('validation-checks', views.ValidationCheckViewSet)
 router.register('check-templates', views.CheckTemplateViewSet)
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path('testbed/generate/', views.TestbedGenerateAPIView.as_view(), name='testbed_generate'),
+]

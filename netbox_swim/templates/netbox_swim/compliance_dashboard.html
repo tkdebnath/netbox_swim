@@ -1,0 +1,520 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+{% load render_table from django_tables2 %}
+
+{% block title %}Software Compliance Dashboard{% endblock %}
+
+{% block tabs %}
+<ul class="nav nav-tabs px-3">
+    <li class="nav-item">
+        <a class="nav-link active" href="{% url 'plugins:netbox_swim:compliance_dashboard' %}">Compliance Dashboard</a>
+    </li>
+</ul>
+{% endblock tabs %}
+
+{% block content %}
+
+{# ---- ROW 1: Overall fleet health ---- #}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-1">Managed Devices</h6>
+                <h2 class="mb-0">{{ total_grouped }}</h2>
+                <small class="text-muted">In Hardware Groups</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-success">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-1">Compliance Rate</h6>
+                <h2 class="mb-0 text-success">{{ compliance_pct }}%</h2>
+                <small class="text-muted">{{ compliant_total }} of {{ total_grouped }} compliant</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-danger">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-1">Non-Compliant</h6>
+                <h2 class="mb-0 text-danger">{{ non_compliant_total }}</h2>
+                <small class="text-muted">Devices needing upgrade</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body p-2 d-flex align-items-center justify-content-center">
+                <canvas id="donutChart" style="max-height: 130px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ---- ROW 2: Severity breakdown cards ---- #}
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card text-center border-success">
+            <div class="card-body py-2">
+                <h3 class="mb-0 text-success">{{ summary.compliant }}</h3>
+                <small class="text-muted">Compliant</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card text-center border-info">
+            <div class="card-body py-2">
+                <h3 class="mb-0 text-info">{{ summary.ahead }}</h3>
+                <small class="text-muted">Ahead</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card text-center border-warning">
+            <div class="card-body py-2">
+                <h3 class="mb-0 text-warning">{{ summary.low }}</h3>
+                <small class="text-muted">Low</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card text-center" style="border-color: #fd7e14;">
+            <div class="card-body py-2">
+                <h3 class="mb-0" style="color: #fd7e14;">{{ summary.medium }}</h3>
+                <small class="text-muted">Medium</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card text-center border-danger">
+            <div class="card-body py-2">
+                <h3 class="mb-0 text-danger">{{ summary.high }}</h3>
+                <small class="text-muted">High</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card text-center border-dark">
+            <div class="card-body py-2">
+                <h3 class="mb-0">{{ summary.critical }}</h3>
+                <small class="text-muted">Critical</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ---- ROW 3: Compliance Trend Chart with Time Range Selector ---- #}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="mdi mdi-chart-timeline-variant"></i> Compliance Trend</h5>
+        <div class="btn-group btn-group-sm" role="group" id="chart-range-selector">
+            <button type="button" class="btn btn-outline-secondary" data-days="7">7D</button>
+            <button type="button" class="btn btn-outline-secondary" data-days="14">14D</button>
+            <button type="button" class="btn btn-outline-secondary active" data-days="30">30D</button>
+            <button type="button" class="btn btn-outline-secondary" data-days="90">90D</button>
+            <button type="button" class="btn btn-outline-secondary" data-days="180">6M</button>
+            <button type="button" class="btn btn-outline-secondary" data-days="365">1Y</button>
+        </div>
+    </div>
+    <div class="card-body" style="height: 320px;">
+        <canvas id="trendChart"></canvas>
+    </div>
+</div>
+
+{# ---- ROW 4: Main content area — Filter sidebar + Table ---- #}
+<div class="row">
+
+    {# ===== LEFT COLUMN: Filter Sidebar (NetBox-style) ===== #}
+    <div class="col-md-3">
+        <div class="card">
+            <h5 class="card-header">
+                <i class="mdi mdi-filter"></i> Filters
+            </h5>
+            <div class="card-body">
+                <form method="get" id="compliance-filter-form">
+                    {% for field in filter_form %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                    </div>
+                    {% endfor %}
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="mdi mdi-magnify"></i> Apply
+                        </button>
+                        <a href="{% url 'plugins:netbox_swim:compliance_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="mdi mdi-close"></i> Clear
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# ===== RIGHT COLUMN: Table + Bulk Actions ===== #}
+    <div class="col-md-9">
+        <form method="post" id="compliance-bulk-form">
+            {% csrf_token %}
+
+            {# Bulk Action Bar #}
+            <div class="card mb-3">
+                <div class="card-body py-2 d-flex align-items-center gap-3 flex-wrap">
+                    <strong>With selected:</strong>
+                    <select name="action" class="form-select form-select-sm" style="width: auto;">
+                        <option value="upgrade">Bulk Upgrade</option>
+                        <option value="sync">Bulk Sync</option>
+                    </select>
+                    <select name="connection_library" class="form-select form-select-sm" style="width: auto;">
+                        <option value="scrapli">Scrapli</option>
+                        <option value="netmiko">Netmiko</option>
+                        <option value="unicon">pyATS Unicon</option>
+                    </select>
+                    <select name="execution_mode" class="form-select form-select-sm" style="width: auto;">
+                        <option value="execute">Execute (Live)</option>
+                        <option value="dry_run">Dry Run</option>
+                        <option value="mock_run">Mock Run</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-danger">
+                        <i class="mdi mdi-play-circle"></i> Run on Selected
+                    </button>
+
+                    {# Configure Columns toggle #}
+                    <div class="dropdown ms-auto">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                id="colConfigBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                                aria-expanded="false">
+                            <i class="mdi mdi-table-column"></i> Columns
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-3" style="min-width: 220px;" aria-labelledby="colConfigBtn" id="colConfigDropdown">
+                            <h6 class="dropdown-header px-0">Toggle Columns</h6>
+                            {# JS will populate these from table headers #}
+                            <div id="col-toggle-list"></div>
+                            <div class="dropdown-divider"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary w-100" id="col-reset-btn">
+                                <i class="mdi mdi-refresh"></i> Reset to Default
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# Table (with pagination via django-tables2) #}
+            <div class="card">
+                <div class="table-responsive">
+                    {% render_table table %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# ===== Chart.js ===== #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // --- Style filter form fields with Bootstrap classes ---
+    document.querySelectorAll('#compliance-filter-form select, #compliance-filter-form input[type="text"]').forEach(function(el) {
+        el.classList.add('form-select', 'form-select-sm');
+    });
+    document.querySelectorAll('#compliance-filter-form input[type="text"]').forEach(function(el) {
+        el.classList.remove('form-select');
+        el.classList.add('form-control', 'form-control-sm');
+    });
+
+    // --- Select-all checkbox toggle ---
+    const headerCheckbox = document.querySelector('#compliance-bulk-form thead input[type="checkbox"]');
+    if (headerCheckbox) {
+        headerCheckbox.addEventListener('change', function() {
+            document.querySelectorAll('#compliance-bulk-form tbody input[name="pk"]')
+                .forEach(cb => cb.checked = headerCheckbox.checked);
+        });
+    }
+
+    // --- Donut Chart ---
+    const donutCtx = document.getElementById('donutChart');
+    if (donutCtx) {
+        new Chart(donutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Compliant', 'Non-Compliant'],
+                datasets: [{
+                    data: [{{ compliant_total }}, {{ non_compliant_total }}],
+                    backgroundColor: ['#198754', '#dc3545'],
+                    borderWidth: 0,
+                    hoverOffset: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                return ctx.label + ': ' + ctx.raw + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===================================================================
+    // Trend Line Chart with Time Range Switching
+    // ===================================================================
+    const trendCtx = document.getElementById('trendChart');
+
+    // Full dataset from server (up to 1 year)
+    const allDates = {{ chart_dates|safe }};          // ISO strings: ["2025-06-01", ...]
+    const allLabels = {{ chart_labels|safe }};         // Display labels: ["Jun 01", ...]
+    const allCompliant = {{ chart_compliant|safe }};
+    const allNonCompliant = {{ chart_non_compliant|safe }};
+    const allTotal = {{ chart_total|safe }};
+
+    let trendChart = null;
+
+    function filterByDays(days) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+        const indices = [];
+        for (let i = 0; i < allDates.length; i++) {
+            if (allDates[i] >= cutoffStr) indices.push(i);
+        }
+        return {
+            labels: indices.map(i => allLabels[i]),
+            compliant: indices.map(i => allCompliant[i]),
+            nonCompliant: indices.map(i => allNonCompliant[i]),
+            total: indices.map(i => allTotal[i]),
+        };
+    }
+
+    function renderTrendChart(days) {
+        const data = filterByDays(days);
+
+        if (data.labels.length === 0) {
+            if (trendChart) { trendChart.destroy(); trendChart = null; }
+            trendCtx.parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="mdi mdi-chart-line mdi-48px"></i><p class="mt-2">No trend data for this range yet. Snapshots are recorded each time you visit this dashboard.<br>Check back later!</p></div>';
+            return;
+        }
+
+        if (trendChart) {
+            // Update existing chart
+            trendChart.data.labels = data.labels;
+            trendChart.data.datasets[0].data = data.total;
+            trendChart.data.datasets[1].data = data.compliant;
+            trendChart.data.datasets[2].data = data.nonCompliant;
+            trendChart.update('none');  // no animation on range switch
+            return;
+        }
+
+        trendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    {
+                        label: 'Total Managed',
+                        data: data.total,
+                        borderColor: '#6c757d',
+                        backgroundColor: 'rgba(108, 117, 125, 0.05)',
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Compliant',
+                        data: data.compliant,
+                        borderColor: '#198754',
+                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                        borderWidth: 2.5,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#198754',
+                        fill: true,
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Non-Compliant',
+                        data: data.nonCompliant,
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.08)',
+                        borderWidth: 2.5,
+                        pointRadius: 3,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#dc3545',
+                        fill: true,
+                        tension: 0.3,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { usePointStyle: true, padding: 20 }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.85)',
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                        padding: 10,
+                        cornerRadius: 6,
+                        displayColors: true,
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 15, color: '#6c757d' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: {
+                            stepSize: 1,
+                            color: '#6c757d',
+                            callback: function(value) { return Number.isInteger(value) ? value : ''; }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- Time Range Button Handlers ---
+    const rangeButtons = document.querySelectorAll('#chart-range-selector button');
+    rangeButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            // Update active state
+            rangeButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            // Re-render chart
+            const days = parseInt(this.getAttribute('data-days'), 10);
+            renderTrendChart(days);
+        });
+    });
+
+    // Initial render: default to 30 days
+    if (trendCtx && allDates.length > 0) {
+        renderTrendChart(30);
+    } else if (trendCtx) {
+        trendCtx.parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="mdi mdi-chart-line mdi-48px"></i><p class="mt-2">No trend data yet. Snapshots are recorded each time you visit this dashboard.<br>Check back tomorrow for your first data point!</p></div>';
+    }
+
+    // ===================================================================
+    // Column Configuration (Toggle Visibility + localStorage)
+    // ===================================================================
+    const STORAGE_KEY = 'swim_compliance_columns';
+    const tableEl = document.querySelector('#compliance-bulk-form table');
+    const colToggleList = document.getElementById('col-toggle-list');
+    const colResetBtn = document.getElementById('col-reset-btn');
+
+    if (tableEl && colToggleList) {
+        const headers = tableEl.querySelectorAll('thead th');
+        const columnNames = [];
+
+        // Build the column list (skip index 0 = checkbox column)
+        headers.forEach(function(th, idx) {
+            if (idx === 0) return;  // Never hide checkbox column
+            const name = th.textContent.trim().replace(/[\s↕↑↓]+/g, ' ').trim() || ('Column ' + idx);
+            columnNames.push({ idx: idx, name: name });
+        });
+
+        // Load saved preferences
+        let savedCols = null;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) savedCols = JSON.parse(raw);
+        } catch (e) {}
+
+        // Default: all visible
+        const colState = {};
+        columnNames.forEach(function(col) {
+            colState[col.idx] = savedCols ? (savedCols[col.idx] !== false) : true;
+        });
+
+        function applyColumnVisibility() {
+            columnNames.forEach(function(col) {
+                const visible = colState[col.idx];
+                // Toggle header
+                headers[col.idx].style.display = visible ? '' : 'none';
+                // Toggle all body cells in this column
+                tableEl.querySelectorAll('tbody tr').forEach(function(row) {
+                    const cells = row.querySelectorAll('td');
+                    if (cells[col.idx]) {
+                        cells[col.idx].style.display = visible ? '' : 'none';
+                    }
+                });
+            });
+        }
+
+        function savePreferences() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(colState));
+            } catch (e) {}
+        }
+
+        // Build checkboxes in the dropdown
+        columnNames.forEach(function(col) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-check mb-1';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'form-check-input';
+            cb.id = 'col-toggle-' + col.idx;
+            cb.checked = colState[col.idx];
+            cb.addEventListener('change', function() {
+                colState[col.idx] = cb.checked;
+                applyColumnVisibility();
+                savePreferences();
+            });
+
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = cb.id;
+            label.textContent = col.name;
+
+            wrapper.appendChild(cb);
+            wrapper.appendChild(label);
+            colToggleList.appendChild(wrapper);
+        });
+
+        // Reset button
+        colResetBtn.addEventListener('click', function() {
+            columnNames.forEach(function(col) {
+                colState[col.idx] = true;
+            });
+            // Update checkboxes
+            colToggleList.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+                cb.checked = true;
+            });
+            applyColumnVisibility();
+            try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        });
+
+        // Apply on page load
+        applyColumnVisibility();
+    }
+
+});
+</script>
+
+{% endblock content %}

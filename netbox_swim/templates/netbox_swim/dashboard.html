@@ -8,7 +8,7 @@
     <div class="col col-md-12">
         <div class="card">
             <h5 class="card-header text-bg-primary">
-                <i class="mdi mdi-cloud-download"></i> SWIM - Software Image Management
+                <i class="mdi mdi-rocket-launch"></i> SWIM - Software Image Management
             </h5>
             <div class="card-body">
                 <p>Welcome to the SWIM Engine Dashboard. Monitor your Golden Image deployments, track fleet compliance, and manage automated upgrade workflows.</p>
@@ -17,10 +17,12 @@
     </div>
 </div>
 
-<div class="row">
+{# ---- ROW 1: Image Repository + Compliance & Baselines ---- #}
+<div class="row mb-3">
+    {# Image Repository #}
     <div class="col col-md-4">
-        <div class="card">
-            <h5 class="card-header">Inventory</h5>
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-package-variant-closed"></i> Image Repository</h5>
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
                     <span class="fw-bold">Software Images</span>
@@ -30,22 +32,23 @@
                     <span class="fw-bold">File Servers</span>
                     <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:fileserver_list' %}">{{ file_server_count }}</a>
                 </div>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="fw-bold">Hardware Groups</span>
-                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:hardwaregroup_list' %}">{{ hardware_group_count }}</a>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="fw-bold">Golden Images</span>
-                    <a class="badge bg-primary" href="{% url 'plugins:netbox_swim:goldenimage_list' %}">{{ golden_image_count }}</a>
-                </div>
             </div>
         </div>
     </div>
 
+    {# Compliance & Baselines #}
     <div class="col col-md-4">
-        <div class="card">
-            <h5 class="card-header">Fleet Compliance</h5>
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-shield-check"></i> Compliance &amp; Baselines</h5>
             <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Hardware Groups</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:hardwaregroup_list' %}">{{ hardware_group_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Golden Images</span>
+                    <a class="badge bg-primary" href="{% url 'plugins:netbox_swim:goldenimage_list' %}">{{ golden_image_count }}</a>
+                </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-success fw-bold"><i class="mdi mdi-check-circle"></i> Compliant</span>
                     <a class="badge bg-success" href="{% url 'plugins:netbox_swim:devicecompliance_list' %}?status=compliant">{{ compliant_count }}</a>
@@ -54,26 +57,108 @@
                     <span class="text-danger fw-bold"><i class="mdi mdi-alert-circle"></i> Non-Compliant</span>
                     <a class="badge bg-danger" href="{% url 'plugins:netbox_swim:devicecompliance_list' %}?status=non_compliant">{{ non_compliant_count }}</a>
                 </div>
-                <div class="mt-4">
-                    <a href="{% url 'plugins:netbox_swim:device_bulk_sync' %}" class="btn btn-outline-info w-100 mb-2">Run Fleet Sync</a>
-                    <a href="{% url 'plugins:netbox_swim:device_bulk_upgrade' %}" class="btn btn-primary w-100">Schedule Upgrades</a>
+                <div class="mt-3">
+                    <a href="{% url 'plugins:netbox_swim:compliance_dashboard' %}" class="btn btn-outline-success w-100">
+                        <i class="mdi mdi-chart-bar"></i> Open Compliance Dashboard
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
+    {# Workflow & Checks Templates #}
     <div class="col col-md-4">
-        <div class="card">
-            <h5 class="card-header">Execution Metrics</h5>
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-file-tree"></i> Templates &amp; Checks</h5>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Workflow Templates</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:workflowtemplate_list' %}">{{ workflow_template_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Check Templates</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:checktemplate_list' %}">{{ check_template_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Validation Checks</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:validationcheck_list' %}">{{ validation_check_count }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ---- ROW 2: Execution Engine + Quick Actions ---- #}
+<div class="row">
+    {# Execution Engine #}
+    <div class="col col-md-4">
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-cog-transfer"></i> Execution Engine</h5>
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
                     <span class="fw-bold">Upgrade Jobs</span>
-                    <a class="badge bg-warning" href="{% url 'plugins:netbox_swim:upgradejob_list' %}">{{ upgrade_jobs_count }}</a>
+                    <a class="badge bg-warning text-dark" href="{% url 'plugins:netbox_swim:upgradejob_list' %}">{{ upgrade_jobs_count }}</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Job Logs</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:joblog_list' %}">{{ job_log_count }}</a>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="fw-bold">Sync Jobs</span>
                     <a class="badge bg-info" href="{% url 'plugins:netbox_swim:syncjob_list' %}">{{ sync_jobs_count }}</a>
                 </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-bold">Sync Records</span>
+                    <a class="badge bg-secondary" href="{% url 'plugins:netbox_swim:devicesyncrecord_list' %}">{{ device_sync_record_count }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Quick Actions #}
+    <div class="col col-md-4">
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-lightning-bolt"></i> Quick Actions</h5>
+            <div class="card-body d-flex flex-column gap-2">
+                <a href="{% url 'plugins:netbox_swim:device_bulk_sync' %}" class="btn btn-outline-info w-100">
+                    <i class="mdi mdi-sync"></i> Run Fleet Sync
+                </a>
+                <a href="{% url 'plugins:netbox_swim:device_bulk_upgrade' %}" class="btn btn-primary w-100">
+                    <i class="mdi mdi-upload"></i> Schedule Bulk Upgrades
+                </a>
+                <a href="{% url 'plugins:netbox_swim:compliance_dashboard' %}" class="btn btn-outline-success w-100">
+                    <i class="mdi mdi-chart-timeline-variant"></i> Compliance Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# Add New #}
+    <div class="col col-md-4">
+        <div class="card h-100">
+            <h5 class="card-header"><i class="mdi mdi-plus-circle"></i> Add New</h5>
+            <div class="card-body d-flex flex-column gap-2">
+                <a href="{% url 'plugins:netbox_swim:softwareimage_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Software Image
+                </a>
+                <a href="{% url 'plugins:netbox_swim:hardwaregroup_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Hardware Group
+                </a>
+                <a href="{% url 'plugins:netbox_swim:goldenimage_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Golden Image
+                </a>
+                <a href="{% url 'plugins:netbox_swim:workflowtemplate_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Workflow Template
+                </a>
+                <a href="{% url 'plugins:netbox_swim:checktemplate_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Check Template
+                </a>
+                <a href="{% url 'plugins:netbox_swim:fileserver_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> File Server
+                </a>
+                <a href="{% url 'plugins:netbox_swim:validationcheck_add' %}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="mdi mdi-plus-thick"></i> Validation Check
+                </a>
             </div>
         </div>
     </div>

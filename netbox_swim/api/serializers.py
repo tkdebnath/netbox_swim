@@ -92,7 +92,7 @@ class JobLogSerializer(NetBoxModelSerializer):
         model = JobLog
         fields = (
             'id', 'display', 'job', 'step', 'action_type',
-            'result', 'message', 'timestamp',
+            'is_success', 'log_output', 'timestamp',
             'tags', 'custom_fields', 'created', 'last_updated',
         )
 

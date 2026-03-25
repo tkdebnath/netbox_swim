@@ -310,6 +310,10 @@ class UpgradeJob(NetBoxModel):
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='upgrade_jobs')
     target_image = models.ForeignKey(SoftwareImage, on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=20, choices=StatusChoices.choices, default=StatusChoices.PENDING)
+    scheduled_time = models.DateTimeField(
+        null=True, blank=True,
+        help_text='If set, the job will not execute until this date/time. Leave blank for immediate execution.'
+    )
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     job_log = models.JSONField(default=list, blank=True)
@@ -329,6 +333,16 @@ class JobLog(NetBoxModel):
     is_success = models.BooleanField(default=True)
     log_output = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        status = '✓' if self.is_success else '✗'
+        return f"[{status}] {self.action_type} — Job #{self.job_id}"
+
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_swim:joblog', args=[self.pk])
 
 
 # ============================================================
@@ -406,3 +420,27 @@ class DeviceSyncRecord(NetBoxModel):
         self.status = 'applied'
         self.save()
         return True
+
+
+# ============================================================
+# Compliance Trend Snapshots
+# ============================================================
+
+class ComplianceSnapshot(models.Model):
+    """
+    Stores a daily snapshot of compliance counts for trend charting.
+    Captured after sync jobs complete or via a scheduled task.
+    """
+    date = models.DateField(unique=True)
+    total_devices = models.IntegerField(default=0)
+    compliant = models.IntegerField(default=0)
+    non_compliant = models.IntegerField(default=0)
+    ahead = models.IntegerField(default=0)
+    unknown = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return f"Snapshot {self.date}: {self.compliant}C / {self.non_compliant}NC"
+

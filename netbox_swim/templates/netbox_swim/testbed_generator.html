@@ -1,0 +1,208 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+
+{% block title %}pyATS Testbed Generator{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col col-md-12">
+        <h2><i class="mdi mdi-test-tube"></i> pyATS Testbed Generator</h2>
+        <p class="text-muted">
+            Generate a pyATS / Genie compatible <code>testbed.yaml</code> from your NetBox inventory.
+            Use the generated testbed with <strong>Genie CLI</strong> to run pre/post checks and diffs.
+        </p>
+    </div>
+</div>
+
+<div class="row">
+    {# --- Left Column: Filters --- #}
+    <div class="col col-md-4">
+        <form method="post" id="testbed-form">
+            {% csrf_token %}
+            <div class="card">
+                <h5 class="card-header bg-dark text-white">
+                    <i class="mdi mdi-filter-variant"></i> Device Filters
+                </h5>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sites</label>
+                        <select name="site_id" class="form-select" multiple size="4">
+                            {% for site in sites %}
+                            <option value="{{ site.pk }}" {% if site.pk in selected_sites %}selected{% endif %}>{{ site.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Hold Ctrl/Cmd to multi-select. Leave empty for all sites.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Platforms</label>
+                        <select name="platform_id" class="form-select" multiple size="4">
+                            {% for platform in platforms %}
+                            <option value="{{ platform.pk }}" {% if platform.pk in selected_platforms %}selected{% endif %}>{{ platform.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Roles</label>
+                        <select name="role_id" class="form-select" multiple size="3">
+                            {% for role in roles %}
+                            <option value="{{ role.pk }}" {% if role.pk in selected_roles %}selected{% endif %}>{{ role.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Credential Profile <span class="text-muted">(optional)</span></label>
+                        <input type="text" name="credential_profile" class="form-control" 
+                               value="{{ credential_profile|default:'' }}"
+                               placeholder="e.g. LAB_CREDS, SITE_B_CREDS, CORE_HQ_CREDS">
+                        <div class="form-text">
+                            Override the testbed-level credential prefix. Default: <code>SWIM</code>.
+                            <br>Available profiles (from <code>swim.env</code>):
+                            <code>LAB_CREDS</code>, <code>SITE_B_CREDS</code>, <code>CORE_HQ_CREDS</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex gap-2">
+                    <button type="submit" name="action" value="preview" class="btn btn-primary flex-grow-1">
+                        <i class="mdi mdi-eye"></i> Preview
+                    </button>
+                    <button type="submit" name="action" value="download" class="btn btn-success flex-grow-1">
+                        <i class="mdi mdi-download"></i> Download YAML
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        {# --- Quick Usage Card --- #}
+        <div class="card mt-3">
+            <h5 class="card-header">
+                <i class="mdi mdi-console-line"></i> Quick Start — Genie CLI
+            </h5>
+            <div class="card-body p-0">
+                <div class="border-bottom px-3 py-2">
+                    <strong class="small text-muted">0. Load credentials</strong>
+                    <pre class="mb-0 mt-1 p-2 bg-dark text-warning rounded" style="font-size: 0.8rem;">source env/swim.env</pre>
+                </div>
+                <div class="border-bottom px-3 py-2">
+                    <strong class="small text-muted">1. Learn current state (Pre-Check)</strong>
+                    <pre class="mb-0 mt-1 p-2 bg-dark text-success rounded" style="font-size: 0.8rem;">genie learn ospf interface routing vrf \
+  --testbed-file testbed.yaml \
+  --output pre_snapshot</pre>
+                </div>
+                <div class="border-bottom px-3 py-2">
+                    <strong class="small text-muted">2. (Perform your changes / upgrade)</strong>
+                </div>
+                <div class="border-bottom px-3 py-2">
+                    <strong class="small text-muted">3. Learn new state (Post-Check)</strong>
+                    <pre class="mb-0 mt-1 p-2 bg-dark text-success rounded" style="font-size: 0.8rem;">genie learn ospf interface routing vrf \
+  --testbed-file testbed.yaml \
+  --output post_snapshot</pre>
+                </div>
+                <div class="px-3 py-2">
+                    <strong class="small text-muted">4. Generate Diff Report</strong>
+                    <pre class="mb-0 mt-1 p-2 bg-dark text-success rounded" style="font-size: 0.8rem;">genie diff pre_snapshot post_snapshot \
+  --output diff_report</pre>
+                </div>
+            </div>
+        </div>
+
+        {# --- API Usage Card --- #}
+        <div class="card mt-3">
+            <h5 class="card-header">
+                <i class="mdi mdi-api"></i> API Download
+            </h5>
+            <div class="card-body">
+                <p class="small mb-1">Download via API with filters:</p>
+                <pre class="p-2 bg-dark text-info rounded mb-0" style="font-size: 0.75rem;">
+# All active devices
+curl -O {{ request.scheme }}://{{ request.get_host }}{% url 'plugins:netbox_swim:testbed_download' %}
+
+# Filtered by site
+curl -O "{{ request.scheme }}://{{ request.get_host }}{% url 'plugins:netbox_swim:testbed_download' %}?site_id=1"
+
+# Filtered by platform + credential profile
+curl -O "{{ request.scheme }}://{{ request.get_host }}{% url 'plugins:netbox_swim:testbed_download' %}?platform_id=2&profile=TACACS"</pre>
+            </div>
+        </div>
+    </div>
+
+    {# --- Right Column: Preview --- #}
+    <div class="col col-md-8">
+        {% if testbed_yaml %}
+        <div class="card">
+            <h5 class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="mdi mdi-file-code"></i> Generated Testbed YAML</span>
+                <span>
+                    <span class="badge text-bg-success">{{ device_count }} device{{ device_count|pluralize }}</span>
+                    {% if skipped_count %}
+                    <span class="badge text-bg-warning">{{ skipped_count }} skipped (no IP)</span>
+                    {% endif %}
+                </span>
+            </h5>
+            <div class="card-body p-0">
+                <pre class="p-3 mb-0 bg-dark text-light" style="font-size: 0.8rem; max-height: 800px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">{{ testbed_yaml }}</pre>
+            </div>
+            <div class="card-footer">
+                <button onclick="navigator.clipboard.writeText(document.querySelector('pre.bg-dark.text-light').innerText).then(() => { this.innerHTML = '<i class=\'mdi mdi-check\'></i> Copied!'; setTimeout(() => { this.innerHTML = '<i class=\'mdi mdi-content-copy\'></i> Copy to Clipboard'; }, 2000); })" class="btn btn-sm btn-outline-light">
+                    <i class="mdi mdi-content-copy"></i> Copy to Clipboard
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="mdi mdi-test-tube mdi-48px text-muted"></i>
+                <h4 class="mt-3 text-muted">No preview yet</h4>
+                <p class="text-muted mb-0">
+                    Select filters on the left and click <strong>Preview</strong> to generate your testbed YAML.
+                    <br>Or click <strong>Download YAML</strong> to get the file directly.
+                </p>
+            </div>
+        </div>
+
+        <div class="card mt-3 border-info">
+            <h5 class="card-header bg-info text-white">
+                <i class="mdi mdi-information"></i> About pyATS Testbeds
+            </h5>
+            <div class="card-body">
+                <p>
+                    A <strong>testbed file</strong> is a YAML file that defines your network devices — their hostnames, 
+                    IP addresses, OS type, and credentials. It's the entry point for all
+                    <a href="https://developer.cisco.com/docs/pyats/" target="_blank">Cisco pyATS</a> and
+                    <a href="https://developer.cisco.com/docs/genie-docs/" target="_blank">Genie</a> operations.
+                </p>
+                <h6>Genie CLI vs Python API</h6>
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th></th>
+                            <th>Genie CLI (<code>genie learn</code>)</th>
+                            <th>Python API (<code>device.learn()</code>)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-muted">Output</td>
+                            <td><span class="badge bg-success">Full directory structure</span> — one JSON per feature per device</td>
+                            <td>Python Ops objects in memory — must explicitly serialize</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Diff</td>
+                            <td><code>genie diff pre/ post/</code> — automatic file comparison</td>
+                            <td>Must use <code>Diff(pre.info, post.info)</code> manually</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Best For</td>
+                            <td>Pre/post upgrade verification, quick audits</td>
+                            <td>Integration into automation pipelines</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

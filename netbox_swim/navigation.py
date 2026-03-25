@@ -39,7 +39,12 @@ menu = PluginMenu(
             ),
             PluginMenuItem(
                 link='plugins:netbox_swim:devicecompliance_list',
-                link_text='Compliance Report',
+                link_text='Compliance Records',
+                permissions=['netbox_swim.view_devicecompliance'],
+            ),
+            PluginMenuItem(
+                link='plugins:netbox_swim:compliance_dashboard',
+                link_text='Compliance Dashboard',
                 permissions=['netbox_swim.view_devicecompliance'],
             ),
             PluginMenuItem(
@@ -69,6 +74,11 @@ menu = PluginMenu(
                 buttons=(PluginMenuButton(link='plugins:netbox_swim:upgradejob_add', title='Add', icon_class='mdi mdi-plus-thick', permissions=['netbox_swim.add_upgradejob']),),
             ),
             PluginMenuItem(
+                link='plugins:netbox_swim:joblog_list',
+                link_text='Job Logs',
+                permissions=['netbox_swim.view_joblog'],
+            ),
+            PluginMenuItem(
                 link='plugins:netbox_swim:devicesyncrecord_list',
                 link_text='Consolidated Sync Results',
                 permissions=['netbox_swim.view_devicesyncrecord'],
@@ -87,6 +97,11 @@ menu = PluginMenu(
                 link='plugins:netbox_swim:device_bulk_upgrade',
                 link_text='Bulk Auto-Remediation',
                 permissions=['netbox_swim.add_upgradejob'],
+            ),
+            PluginMenuItem(
+                link='plugins:netbox_swim:testbed_generator',
+                link_text='pyATS Testbed Generator',
+                permissions=[],
             ),
         )),
     ),

@@ -234,6 +234,15 @@ class BulkUpgradeForm(django_forms.Form):
         label="Execution Mode",
         help_text="Select the execution mode for this workflow."
     )
+    scheduled_time = django_forms.DateTimeField(
+        required=False,
+        label='Schedule For (Maintenance Window)',
+        help_text='Leave blank to execute immediately. Set a future date/time to defer execution to a maintenance window.',
+        widget=django_forms.DateTimeInput(attrs={
+            'type': 'datetime-local',
+            'class': 'form-control',
+        }),
+    )
 
 
 class UpgradeJobForm(NetBoxModelForm):
@@ -251,9 +260,10 @@ class UpgradeJobForm(NetBoxModelForm):
         model = models.UpgradeJob
         fields = (
             'device', 'target_image', 'template', 'status',
-            'start_time', 'tags',
+            'scheduled_time', 'start_time', 'tags',
         )
         widgets = {
+            'scheduled_time': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
             'start_time': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 

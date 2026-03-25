@@ -2,7 +2,7 @@
 {% load helpers %}
 
 {% block control_buttons %}
-{% if object.status == 'pending' or object.status == 'failed' %}
+{% if object.status == 'pending' or object.status == 'failed' or object.status == 'scheduled' %}
 <form method="post" action="{% url 'plugins:netbox_swim:upgradejob_execute' pk=object.pk %}" style="display: inline-block;">
     {% csrf_token %}
     <button type="submit" class="btn btn-sm btn-primary">
@@ -10,11 +10,23 @@
     </button>
 </form>
 {% endif %}
+{% if object.logs.count or object.job_log %}
+<a href="{% url 'plugins:netbox_swim:upgradejob_download_checks' pk=object.pk %}" class="btn btn-sm btn-outline-success">
+    <i class="mdi mdi-download"></i> Download Checks Archive
+</a>
+{% endif %}
+<a href="{% url 'plugins:netbox_swim:upgradejob_testbed' pk=object.pk %}" class="btn btn-sm btn-outline-info">
+    <i class="mdi mdi-test-tube"></i> Download Testbed
+</a>
 {% endblock control_buttons %}
 
 {% block content %}
+{# ============================================================ #}
+{# ROW 1: Job Details (left) | Pipeline Lineage (right)         #}
+{# ============================================================ #}
 <div class="row">
-    <div class="col col-md-6">
+    {# --- Left Column: Job Metadata --- #}
+    <div class="col col-md-4">
         <div class="card">
             <h5 class="card-header">Upgrade Job</h5>
             <div class="card-body">
@@ -43,11 +55,13 @@
                             {% else %}
                                 <span class="badge text-bg-warning">{{ object.get_status_display }}</span>
                             {% endif %}
+                            {% if dry_run %}<span class="badge text-bg-secondary ms-1">DRY RUN</span>{% endif %}
+                            {% if mock_run %}<span class="badge text-bg-secondary ms-1">MOCK</span>{% endif %}
                         </td>
                     </tr>
                     <tr>
                         <th scope="row">Scheduled For</th>
-                        <td>{{ object.scheduled_time|default:"—" }}</td>
+                        <td>{{ object.scheduled_time|default:"— (Immediate)" }}</td>
                     </tr>
                     <tr>
                         <th scope="row">Started</th>
@@ -63,9 +77,302 @@
         {% include 'inc/panels/custom_fields.html' %}
         {% include 'inc/panels/tags.html' %}
     </div>
-    <div class="col col-md-6">
+
+    {# --- Right Column: Pipeline Lineage (Birth → Death) --- #}
+    <div class="col col-md-8">
         <div class="card">
-            <h5 class="card-header">Job Logs</h5>
+            <h5 class="card-header bg-dark text-white">
+                <i class="mdi mdi-transit-connection-variant"></i> Pipeline Lineage — Birth to Death
+            </h5>
+            <div class="card-body p-0">
+                {# ---- Phase 1: Hardware Group Match ---- #}
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">1</span>
+                        <strong>Hardware Group Matching</strong>
+                    </div>
+                    {% if matched_hg %}
+                    <table class="table table-sm table-borderless mb-0 ms-4">
+                        <tr>
+                            <td class="text-muted" style="width:140px;">Matched Group</td>
+                            <td><a href="{{ matched_hg.get_absolute_url }}"><strong>{{ matched_hg.name }}</strong></a></td>
+                        </tr>
+                        {% for key, val in match_criteria.items %}
+                        <tr>
+                            <td class="text-muted">{{ key }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ val }}</span></td>
+                        </tr>
+                        {% endfor %}
+                        {% if matched_hg.deployment_mode %}
+                        <tr>
+                            <td class="text-muted">Deployment Mode</td>
+                            <td>{{ matched_hg.get_deployment_mode_display }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                    {% else %}
+                    <p class="ms-4 mb-0 text-danger"><i class="mdi mdi-alert"></i> No Hardware Group matched this device.</p>
+                    {% endif %}
+                </div>
+
+                {# ---- Phase 2: Golden Image & File Server ---- #}
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">2</span>
+                        <strong>Golden Image &amp; File Server</strong>
+                    </div>
+                    <table class="table table-sm table-borderless mb-0 ms-4">
+                        <tr>
+                            <td class="text-muted" style="width:140px;">Golden Image</td>
+                            <td>
+                                {% if golden_image %}
+                                    <a href="{{ golden_image.get_absolute_url }}">{{ golden_image }}</a>
+                                {% else %}
+                                    <span class="text-muted">— (Direct assignment)</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Target Image</td>
+                            <td>{{ object.target_image|linkify|default:"—" }}</td>
+                        </tr>
+                        {% if file_server %}
+                        <tr>
+                            <td class="text-muted">File Server</td>
+                            <td><a href="{{ file_server.get_absolute_url }}">{{ file_server.name }}</a> <span class="badge bg-light text-dark border">{{ file_server.protocol|upper }}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Download Path</td>
+                            <td><code class="small">{{ download_url }}</code></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td class="text-muted">File Server</td>
+                            <td><span class="text-muted">Not configured on image</span></td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+
+                {# ---- Phase 3: Connection Module ---- #}
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">3</span>
+                        <strong>Connection Module Selection</strong>
+                    </div>
+                    <div class="ms-4">
+                        <div class="d-flex gap-2 flex-wrap mb-1">
+                            {% for lib in connection_priority %}
+                                {% if forloop.first %}
+                                    <span class="badge text-bg-success"><i class="mdi mdi-check-circle"></i> {{ lib|upper }} (Primary)</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark border">{{ lib|upper }} (Fallback {{ forloop.counter0 }})</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% if connection_override %}
+                        <span class="small text-warning"><i class="mdi mdi-alert-circle"></i> Override active — set via job config</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# ---- Phase 4: Platform & Parsers ---- #}
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">4</span>
+                        <strong>Platform Detection &amp; Parsers</strong>
+                    </div>
+                    <table class="table table-sm table-borderless mb-0 ms-4">
+                        <tr>
+                            <td class="text-muted" style="width:140px;">Platform</td>
+                            <td><span class="badge bg-light text-dark border">{{ platform_name }}</span> <code class="small text-secondary">({{ platform_slug }})</code></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Parser Engines</td>
+                            <td>
+                                {% for engine in parser_engines %}
+                                    <span class="badge bg-info text-dark me-1">{{ engine }}</span>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                {# ---- Phase 5: Config Context Overrides ---- #}
+                <div class="border-bottom px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">5</span>
+                        <strong>Config Context Overrides</strong>
+                    </div>
+                    {% if has_config_context %}
+                    <table class="table table-sm table-borderless mb-0 ms-4">
+                        {% for key, val in config_context.items %}
+                        <tr>
+                            <td class="text-muted" style="width:180px;">{{ key }}</td>
+                            <td><code>{{ val }}</code></td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    {% else %}
+                    <p class="ms-4 mb-0 text-muted small"><i class="mdi mdi-information-outline"></i> No <code>swim</code> Config Context defined on device. Using defaults.</p>
+                    {% endif %}
+                </div>
+
+                {# ---- Phase 6: Workflow Step Sequence ---- #}
+                <div class="px-3 py-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge text-bg-primary rounded-pill me-2">6</span>
+                        <strong>Workflow Execution Sequence</strong>
+                        {% if object.template %}
+                        <a href="{{ object.template.get_absolute_url }}" class="ms-auto badge bg-light text-dark border">{{ object.template.name }}</a>
+                        {% endif %}
+                    </div>
+                    {% if workflow_steps %}
+                    <div class="ms-4">
+                        {% for step in workflow_steps %}
+                        <div class="d-flex align-items-start py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                            <div class="me-3">
+                                <span class="badge rounded-circle {% if step.action_type == 'readiness' %}bg-info{% elif step.action_type == 'precheck' %}bg-warning{% elif step.action_type == 'distribution' %}bg-primary{% elif step.action_type == 'activation' %}bg-danger{% elif step.action_type == 'postcheck' %}bg-success{% else %}bg-secondary{% endif %}" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;">{{ step.order }}</span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <strong>{{ step.name }}</strong>
+                                {% if step.has_override %}<span class="badge bg-warning text-dark ms-1">Step Override</span>{% endif %}
+                                <br>
+                                <code class="small text-secondary">{{ step.predicted_class }}</code>
+                                <span class="text-muted small ms-2">via <strong>{{ step.primary_lib|upper }}</strong></span>
+                                {% if step.fallback_libs %}
+                                    <span class="text-muted small">(fallback: {% for fb in step.fallback_libs %}{{ fb }}{% if not forloop.last %}, {% endif %}{% endfor %})</span>
+                                {% endif %}
+                                {% if step.check_template %}
+                                    <br><span class="small text-info"><i class="mdi mdi-clipboard-check-outline"></i> Check Template: {{ step.check_template }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="ms-4 mb-0 text-muted">No workflow steps defined.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# ROW 1.5: Checks Archive Download (if logs exist)             #}
+{# ============================================================ #}
+{% if object.logs.count or object.status == 'completed' or object.status == 'failed' %}
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card border-success">
+            <div class="card-body d-flex align-items-center justify-content-between py-3">
+                <div>
+                    <h6 class="mb-1">
+                        <i class="mdi mdi-folder-zip-outline text-success"></i>
+                        Checks Archive
+                    </h6>
+                    <span class="text-muted small">
+                        Pre-check, Post-check, and Diff analysis packaged as
+                        <code>{{ object.device.name }}_checks_{{ object.end_time|date:"dmy"|default:"pending" }}.zip</code>
+                    </span>
+                    <div class="mt-1">
+                        {% if object.extra_config.checks_archive.has_precheck %}
+                            <span class="badge bg-info text-dark me-1"><i class="mdi mdi-check"></i> Precheck</span>
+                        {% endif %}
+                        {% if object.extra_config.checks_archive.has_postcheck %}
+                            <span class="badge bg-success me-1"><i class="mdi mdi-check"></i> Postcheck</span>
+                        {% endif %}
+                        {% if object.extra_config.checks_archive.has_diffs %}
+                            <span class="badge bg-warning text-dark me-1"><i class="mdi mdi-swap-horizontal"></i> Diffs</span>
+                        {% endif %}
+                        {% if not object.extra_config.checks_archive %}
+                            <span class="badge bg-secondary"><i class="mdi mdi-database"></i> From Database Logs</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="{% url 'plugins:netbox_swim:upgradejob_download_checks' pk=object.pk %}"
+                   class="btn btn-success">
+                    <i class="mdi mdi-download"></i> Download ZIP
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ============================================================ #}
+{# ROW 1.6: pyATS Testbed (single device)                       #}
+{# ============================================================ #}
+{% if testbed_yaml %}
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card border-info">
+            <h5 class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+                <span><i class="mdi mdi-test-tube"></i> pyATS Testbed — {{ object.device.name }}</span>
+                <a href="{% url 'plugins:netbox_swim:upgradejob_testbed' pk=object.pk %}"
+                   class="btn btn-sm btn-success">
+                    <i class="mdi mdi-download"></i> Download testbed.yaml
+                </a>
+            </h5>
+            <div class="card-body p-0">
+                <div class="row g-0">
+                    {# -- YAML Preview -- #}
+                    <div class="col col-md-8 border-end">
+                        <pre id="testbed-yaml-content" class="p-3 mb-0 bg-dark text-light" style="font-size: 0.78rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">{{ testbed_yaml }}</pre>
+                    </div>
+                    {# -- Quick Reference -- #}
+                    <div class="col col-md-4">
+                        <div class="p-3">
+                            <h6 class="mb-2"><i class="mdi mdi-console-line"></i> Quick Genie Commands</h6>
+                            <div class="mb-2">
+                                <span class="small text-muted">Pre-check:</span>
+                                <pre class="p-2 bg-dark text-success rounded mb-1" style="font-size: 0.72rem;">source env/swim.env
+genie learn ospf interface routing \
+  --testbed-file {{ object.device.name }}_testbed.yaml \
+  --output pre_{{ object.device.name }}</pre>
+                            </div>
+                            <div class="mb-2">
+                                <span class="small text-muted">Post-check:</span>
+                                <pre class="p-2 bg-dark text-success rounded mb-1" style="font-size: 0.72rem;">genie learn ospf interface routing \
+  --testbed-file {{ object.device.name }}_testbed.yaml \
+  --output post_{{ object.device.name }}</pre>
+                            </div>
+                            <div>
+                                <span class="small text-muted">Diff:</span>
+                                <pre class="p-2 bg-dark text-warning rounded mb-0" style="font-size: 0.72rem;">genie diff pre_{{ object.device.name }} \
+  post_{{ object.device.name }} \
+  --output diff_{{ object.device.name }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex gap-2">
+                <button onclick="navigator.clipboard.writeText(document.getElementById('testbed-yaml-content').innerText).then(() => { this.innerHTML = '<i class=\'mdi mdi-check\'></i> Copied!'; setTimeout(() => { this.innerHTML = '<i class=\'mdi mdi-content-copy\'></i> Copy YAML'; }, 2000); })" class="btn btn-sm btn-outline-secondary">
+                    <i class="mdi mdi-content-copy"></i> Copy YAML
+                </button>
+                <a href="{% url 'plugins:netbox_swim:testbed_generator' %}" class="btn btn-sm btn-outline-info ms-auto">
+                    <i class="mdi mdi-test-tube"></i> Full Testbed Generator (multi-device)
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ============================================================ #}
+{# ROW 2: Job Logs — Full Width                                 #}
+{# ============================================================ #}
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header d-flex align-items-center">
+                <span><i class="mdi mdi-format-list-text"></i> Job Execution Logs</span>
+                <a href="{% url 'plugins:netbox_swim:joblog_list' %}?job_id={{ object.pk }}" class="btn btn-sm btn-outline-secondary ms-auto">
+                    <i class="mdi mdi-open-in-new"></i> View All Logs
+                </a>
+            </h5>
             <div class="card-body">
                 {% if object.logs.all %}
                 <div class="accordion" id="logAccordion">
@@ -73,12 +380,15 @@
                     <div class="accordion-item">
                         <h2 class="accordion-header" id="heading{{ log.pk }}">
                             <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ log.pk }}">
-                                <strong>{{ log.get_action_type_display }}</strong> &nbsp;-&nbsp; 
+                                <strong>{{ log.action_type }}</strong> &nbsp;-&nbsp; 
                                 {% if log.is_success %}
                                     <span class="badge text-bg-success ms-2">Pass</span>
                                 {% else %}
                                     <span class="badge text-bg-danger ms-2">Fail</span>
                                 {% endif %}
+                                <a href="{{ log.get_absolute_url }}" class="ms-2 text-muted small" title="Open log detail" onclick="event.stopPropagation();">
+                                    <i class="mdi mdi-open-in-new"></i>
+                                </a>
                                 <span class="ms-auto text-muted small">{{ log.timestamp|date:"H:i:s" }}</span>
                             </button>
                         </h2>
@@ -95,4 +405,49 @@
         </div>
     </div>
 </div>
+
+{# ============================================================ #}
+{# ROW 3: Inline JSON Log (job_log field) — if present          #}
+{# ============================================================ #}
+{% if object.job_log %}
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">
+                <i class="mdi mdi-clock-outline"></i> Engine Activity Timeline
+            </h5>
+            <div class="card-body p-0">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:180px;">Time</th>
+                            <th style="width:80px;">Level</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in object.job_log reversed %}
+                        <tr>
+                            <td class="text-muted small">{{ entry.time }}</td>
+                            <td>
+                                {% if entry.level == 'success' %}
+                                    <span class="badge text-bg-success">{{ entry.level }}</span>
+                                {% elif entry.level == 'error' %}
+                                    <span class="badge text-bg-danger">{{ entry.level }}</span>
+                                {% elif entry.level == 'warning' %}
+                                    <span class="badge text-bg-warning">{{ entry.level }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-info">{{ entry.level }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ entry.message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock content %}

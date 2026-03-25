@@ -62,6 +62,7 @@ urlpatterns = (
     # ---------------------------------------------------------
     # Pillar 2b: Compliance Report
     # ---------------------------------------------------------
+    path('compliance/dashboard/', views.ComplianceDashboardView.as_view(), name='compliance_dashboard'),
     path('compliance/', views.DeviceComplianceListView.as_view(), name='devicecompliance_list'),
     path('compliance/<int:pk>/', views.DeviceComplianceView.as_view(), name='devicecompliance'),
     path('compliance/<int:pk>/edit/', views.DeviceComplianceEditView.as_view(), name='devicecompliance_edit'),
@@ -115,6 +116,8 @@ urlpatterns = (
     path('upgrade-jobs/<int:pk>/edit/', views.UpgradeJobEditView.as_view(), name='upgradejob_edit'),
     path('upgrade-jobs/<int:pk>/delete/', views.UpgradeJobDeleteView.as_view(), name='upgradejob_delete'),
     path('upgrade-jobs/<int:pk>/execute/', views.UpgradeJobExecuteView.as_view(), name='upgradejob_execute'),
+    path('upgrade-jobs/<int:pk>/download-checks/', views.UpgradeJobDownloadChecksView.as_view(), name='upgradejob_download_checks'),
+    path('upgrade-jobs/<int:pk>/testbed/', views.UpgradeJobTestbedDownloadView.as_view(), name='upgradejob_testbed'),
     path('upgrade-jobs/<int:pk>/changelog/', ObjectChangeLogView.as_view(), name='upgradejob_changelog', kwargs={'model': models.UpgradeJob}),
 
     # ---------------------------------------------------------
@@ -139,8 +142,15 @@ urlpatterns = (
     path('sync-records/<int:pk>/changelog/', ObjectChangeLogView.as_view(), name='devicesyncrecord_changelog', kwargs={'model': models.DeviceSyncRecord}),
 
     # ---------------------------------------------------------
-    # Bulk Sync Jobs
+    # Job Logs (per-step execution logs for Upgrade Jobs)
     # ---------------------------------------------------------
-    path('sync-jobs/', views.SyncJobListView.as_view(), name='syncjob_list'),
-    path('sync-jobs/<int:pk>/', views.SyncJobView.as_view(), name='syncjob'),
+    path('job-logs/', views.JobLogListView.as_view(), name='joblog_list'),
+    path('job-logs/<int:pk>/', views.JobLogView.as_view(), name='joblog'),
+    path('job-logs/<int:pk>/changelog/', ObjectChangeLogView.as_view(), name='joblog_changelog', kwargs={'model': models.JobLog}),
+
+    # ---------------------------------------------------------
+    # pyATS Testbed Generator
+    # ---------------------------------------------------------
+    path('testbed/', views.TestbedGeneratorView.as_view(), name='testbed_generator'),
+    path('testbed/download/', views.TestbedDownloadView.as_view(), name='testbed_download'),
 )

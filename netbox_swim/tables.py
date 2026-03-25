@@ -113,12 +113,14 @@ class UpgradeJobTable(NetBoxTable):
 
 
 class JobLogTable(NetBoxTable):
-    result = ChoiceFieldColumn()
+    job = tables.Column(linkify=True)
+    action_type = tables.Column(linkify=True)
+    is_success = columns.BooleanColumn()
 
     class Meta(NetBoxTable.Meta):
         model = JobLog
-        fields = ('pk', 'id', 'job', 'action_type', 'result', 'message', 'timestamp')
-        default_columns = ('action_type', 'result', 'message', 'timestamp')
+        fields = ('pk', 'id', 'job', 'action_type', 'step', 'is_success', 'log_output', 'timestamp')
+        default_columns = ('job', 'action_type', 'step', 'is_success', 'timestamp')
 
 from netbox.tables import columns
 
@@ -183,3 +185,78 @@ class SyncJobTable(NetBoxTable):
         model = SyncJob
         fields = ('pk', 'status', 'start_time', 'end_time', 'selected_device_count', 'failed_device_count', 'actions')
         default_columns = ('pk', 'status', 'start_time', 'selected_device_count', 'failed_device_count', 'actions')
+
+
+# =================================================================
+# Compliance Dashboard Table (non-model, powered by device queryset)
+# =================================================================
+
+class ComplianceDashboardTable(tables.Table):
+    """
+    A standalone django-tables2 table that renders compliance data.
+    Each row is a dict, not a model instance, so we use accessors.
+    """
+    pk = tables.CheckBoxColumn(accessor='device_pk', attrs={
+        'td__input': {'name': 'pk', 'value': tables.A('device_pk')},
+    })
+    device_name = tables.TemplateColumn(
+        template_code='<a href="{{ record.device_url }}">{{ record.device_name }}</a>',
+        verbose_name='Device',
+        orderable=True,
+    )
+    site = tables.Column(accessor='site_name', verbose_name='Site', orderable=True)
+    platform = tables.Column(accessor='platform_name', verbose_name='Platform', orderable=True)
+    device_type = tables.Column(accessor='device_type_name', verbose_name='Device Type', orderable=True)
+    hw_group_name = tables.TemplateColumn(
+        template_code='''
+            {% if record.hw_group_url %}
+            <a href="{{ record.hw_group_url }}">{{ record.hw_group_name }}</a>
+            {% else %}
+            <span class="text-muted">No Group</span>
+            {% endif %}
+        ''',
+        verbose_name='Hardware Group',
+        orderable=True,
+    )
+    current_version = tables.TemplateColumn(
+        template_code='''
+            {% if record.current_version %}
+            <code>{{ record.current_version }}</code>
+            {% else %}
+            <span class="text-muted">Not Synced</span>
+            {% endif %}
+        ''',
+        verbose_name='Running Version',
+        orderable=True,
+    )
+    golden_version = tables.TemplateColumn(
+        template_code='''
+            {% if record.golden_version %}
+            <code>{{ record.golden_version }}</code>
+            {% else %}
+            <span class="text-muted">No Baseline</span>
+            {% endif %}
+        ''',
+        verbose_name='Golden Version',
+        orderable=True,
+    )
+    gap_display = tables.Column(accessor='gap_display', verbose_name='Version Gap', orderable=False)
+    severity = tables.TemplateColumn(
+        template_code='''
+            {% if record.severity_css == "orange" %}
+            <span class="badge" style="background-color: #fd7e14; color: #fff;">{{ record.severity }}</span>
+            {% elif record.severity_css == "dark" %}
+            <span class="badge text-bg-dark">{{ record.severity }}</span>
+            {% else %}
+            <span class="badge text-bg-{{ record.severity_css }}">{{ record.severity }}</span>
+            {% endif %}
+        ''',
+        verbose_name='Severity',
+        orderable=True,
+    )
+
+    class Meta:
+        attrs = {'class': 'table table-hover object-list'}
+        row_attrs = {'class': 'object-row'}
+        orderable = True
+
