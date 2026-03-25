@@ -567,28 +567,40 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
             # --- Inline handlers for steps that don't need SSH connections ---
             if action == 'ping':
                 import subprocess
+                import time as _time
                 host = str(device.primary_ip.address.ip) if device.primary_ip else None
                 if not host:
                     log_entry.log_output += "PING FAILED: Device has no Primary IP assigned.\n"
                     log_entry.is_success = False
                     overall_success = False
                 else:
-                    ping_count = step.extra_config.get('ping_count', 3) if step.extra_config else 3
-                    ping_timeout = step.extra_config.get('ping_timeout', 5) if step.extra_config else 5
-                    log_entry.log_output += f"Pinging {host} ({ping_count} packets, {ping_timeout}s timeout)...\n"
+                    retries = step.extra_config.get('retries', 3) if step.extra_config else 3
+                    interval = step.extra_config.get('interval', 10) if step.extra_config else 10
+                    log_entry.log_output += f"Checking reachability for {device.name} ({host})...\n"
                     
-                    result = subprocess.run(
-                        ['ping', '-c', str(ping_count), '-W', str(ping_timeout), host],
-                        capture_output=True, text=True, timeout=ping_timeout * ping_count + 10
-                    )
-                    log_entry.log_output += result.stdout
-                    if result.returncode == 0:
+                    reachable = False
+                    for attempt in range(1, retries + 1):
+                        try:
+                            result = subprocess.call(
+                                ['ping', '-c', '1', host],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
+                            )
+                            if result == 0:
+                                log_entry.log_output += f"Device {device.name} is reachable! (attempt {attempt})\n"
+                                reachable = True
+                                break
+                        except subprocess.TimeoutExpired:
+                            pass
+                        
+                        log_entry.log_output += f"Ping attempt {attempt}/{retries} failed. Retrying in {interval}s...\n"
+                        if attempt < retries:
+                            _time.sleep(interval)
+                    
+                    if reachable:
                         log_entry.log_output += f"\nPING SUCCESS: {host} is reachable.\n"
                         log_entry.is_success = True
                     else:
-                        log_entry.log_output += f"\nPING FAILED: {host} is unreachable.\n"
-                        if result.stderr:
-                            log_entry.log_output += result.stderr
+                        log_entry.log_output += f"\nPING FAILED: {host} unreachable after {retries} attempts.\n"
                         log_entry.is_success = False
                         overall_success = False
 
