@@ -1,58 +1,73 @@
 import re
-from unicon.eal.dialogs import Dialog, Statement
+import logging
 from ..base import ScrapliTask, NetmikoTask, UniconTask
 
-class CiscoDistributeLogicMixin:
-    """Provides generic methods to distribute firmware to Cisco IOS/IOS-XE."""
+logger = logging.getLogger('netbox_swim')
+
+# Platforms with implemented distribution support
+SUPPORTED_OS_FAMILIES = {'iosxe', 'ios'}
+
+
+class CiscoDistributeScrapli(ScrapliTask):
+    def execute(self, device, target_image=None, **kwargs):
+        return [("FAIL", "Scrapli distribution is not yet implemented. "
+                 "Set connection_priority to 'unicon' in your Hardware Group.")]
+
+
+class CiscoDistributeNetmiko(NetmikoTask):
+    def execute(self, device, target_image=None, **kwargs):
+        return [("FAIL", "Netmiko distribution is not yet implemented. "
+                 "Set connection_priority to 'unicon' in your Hardware Group.")]
+
+
+class CiscoDistributeUnicon(UniconTask):
+    """
+    Distributes firmware to Cisco IOS/IOS-XE devices via HTTP file copy.
     
-    def _execute_file_transfer(self, device, target_image):
+    Supported platforms: IOS, IOS-XE
+    Supported protocols: HTTP
+    NX-OS, EOS, Junos: Not yet implemented (will abort cleanly).
+    """
+    
+    def _resolve_os_family(self, device):
+        """Resolve OS family from PLATFORM_MAPPINGS."""
+        from ...constants import PLATFORM_MAPPINGS
+        slug = getattr(device.platform, 'slug', 'default')
+        mapping = PLATFORM_MAPPINGS.get(slug, PLATFORM_MAPPINGS.get('default', {}))
+        genie_os = mapping.get('genie', 'iosxe')
+        if genie_os in ('ios', 'iosxe'):
+            return 'iosxe'
+        return genie_os
+
+    def execute(self, device, target_image=None, **kwargs):
         if not target_image:
-            return "[SKIP] No target image assigned."
+            return [("FAIL", "No target image assigned. Cannot distribute.")]
+        
+        # --- Platform gate ---
+        os_family = self._resolve_os_family(device)
+        if os_family not in SUPPORTED_OS_FAMILIES:
+            return [("FAIL", f"Distribution for '{os_family.upper()}' platform is not yet implemented. "
+                     f"Currently supported: IOS, IOS-XE only. "
+                     f"Device '{device.name}' upgrade aborted at distribution stage.")]
+        
+        # --- File Server validation ---
         fs = target_image.file_server
         if not fs:
-            raise ValueError(f"Target SoftwareImage '{target_image.image_name}' is not assigned to a FileServer.")
-            
+            return [("FAIL", f"Target image '{target_image.image_name}' is not assigned to a File Server. "
+                     f"Assign a File Server to this Software Image before running distribution.")]
+        
+        # --- Protocol gate ---
+        protocol = fs.protocol.lower() if fs.protocol else 'http'
+        if protocol not in ('http', 'https'):
+            return [("FAIL", f"Protocol '{protocol}' is not yet implemented for distribution. "
+                     f"Currently supported: HTTP/HTTPS. "
+                     f"Update File Server '{fs.name}' or use HTTP.")]
+        
+        # --- Build copy command ---
         boot_drive = self._get_boot_drive(device, target_image)
         file_name = target_image.image_file_name
         dest_path = f"{boot_drive}{file_name}"
-
-        # Standard Cisco IOS copy syntax
-        cmd = f"copy {fs.protocol}://{fs.username}:{fs.password}@{fs.ip_address}/{fs.base_path}/{file_name} {dest_path}"
         
-        return self._handle_interactive_copy(cmd, dest_path)
-
-    def _handle_interactive_copy(self, cmd, dest_path):
-        raise NotImplementedError
-
-
-class CiscoDistributeScrapli(ScrapliTask, CiscoDistributeLogicMixin):
-    def execute(self, device, target_image=None, **kwargs):
-        raise NotImplementedError("Scrapli distribution is pending future implementation.")
-
-
-class CiscoDistributeNetmiko(NetmikoTask, CiscoDistributeLogicMixin):
-    def execute(self, device, target_image=None, **kwargs):
-        raise NotImplementedError("Netmiko distribution is pending future implementation.")
-
-
-class CiscoDistributeUnicon(UniconTask, CiscoDistributeLogicMixin):
-    def execute(self, device, target_image=None, **kwargs):
-        if not target_image:
-            return [("SKIP", "No target image assigned.")]
-            
-        fs = target_image.file_server
-        if not fs:
-            raise ValueError(f"Target SoftwareImage '{target_image.image_name}' is not assigned to a FileServer.")
-            
-        protocol = fs.protocol.lower() if fs.protocol else 'http'
-        if protocol != 'http':
-            raise NotImplementedError(f"Protocol '{protocol}' is marked for future implementation. Currently only HTTP is supported.")
-            
-        boot_drive = getattr(self, '_get_boot_drive', lambda d, t: 'flash:/')(device, target_image)
-        file_name = target_image.image_file_name
-        dest_path = f"{boot_drive}{file_name}"
-        
-        # HTTP specific path format for IOS copy
         auth_str = f"{fs.username}:{fs.password}@" if fs.username else ""
         port_str = f":{fs.port}" if fs.port else ""
         base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
@@ -60,42 +75,74 @@ class CiscoDistributeUnicon(UniconTask, CiscoDistributeLogicMixin):
         cmd = f"copy {protocol}://{auth_str}{fs.ip_address}{port_str}/{base_path}{file_name} {dest_path}"
         
         expected_size = getattr(target_image, 'file_size_bytes', None)
-        expected_md5 = getattr(target_image, 'hash_md5', None)
+        expected_md5 = getattr(target_image, 'hash_md5', None) or ""
         
-        tacacs_intf = device.custom_field_data.get('tacacs_interface') or device.custom_field_data.get('tacacs_source_interface')
+        tacacs_intf = (device.custom_field_data.get('tacacs_interface') 
+                       or device.custom_field_data.get('tacacs_source_interface'))
         
+        # --- Connect and execute ---
         with self.connect(device, connection_timeout=300) as pyats_device:
-            # Re-used logic for configuring HTTP client source interface
+            
+            # Configure HTTP client source interface (VRF routing)
             if tacacs_intf:
                 try:
-                    pyats_device.configure(f"ip http client source-interface {tacacs_intf}", timeout=30)
+                    pyats_device.configure(
+                        f"ip http client source-interface {tacacs_intf}", timeout=30
+                    )
                 except Exception as e:
-                    return [("FAIL", f"Failed to push ip http client config using tacacs interface {tacacs_intf}: {str(e)}")]
+                    return [("FAIL", f"Failed to set HTTP client source-interface "
+                             f"'{tacacs_intf}': {str(e)}")]
             
-            # 1. Pre-Check existing file
+            # 1. Pre-check: skip transfer if file already exists with correct size + MD5
             if expected_size:
                 try:
                     result = pyats_device.execute(f"dir {dest_path}", timeout=30)
                     match = re.search(r'\s+(\d+)\s+\w{3}\s+\d+', result)
                     if match and int(match.group(1)) == expected_size:
                         if expected_md5:
-                            verify_out = pyats_device.execute(f"verify /md5 {dest_path} {expected_md5}", timeout=600)
+                            verify_out = pyats_device.execute(
+                                f"verify /md5 {dest_path} {expected_md5}", timeout=600
+                            )
                             if "Verified" in verify_out:
-                                return [("PASS", f"File {file_name} already exists and MD5 verified. Skipping transfer.")]
+                                return [("PASS", f"File '{file_name}' already exists on "
+                                         f"{boot_drive} with matching MD5. Skipping transfer.")]
+                        else:
+                            return [("PASS", f"File '{file_name}' already exists on "
+                                     f"{boot_drive} with matching size ({expected_size} bytes). "
+                                     f"Skipping transfer (no MD5 configured for verification).")]
                 except Exception:
-                    pass
+                    pass  # File doesn't exist yet — proceed with transfer
             
-            # 2. Setup Dialog Handler for copy prompts
+            # 2. Setup Unicon dialog handler for interactive copy prompts
+            from unicon.eal.dialogs import Dialog, Statement
             dialog = Dialog([
-                Statement(pattern=r'Destination filename \[.*\]\?', action='sendline()', loop_continue=True),
-                Statement(pattern=r'Do you want to over write\? \[confirm\]', action='sendline()', loop_continue=True),
-                Statement(pattern=r'\[confirm\]', action='sendline()', loop_continue=True),
-                Statement(pattern=r'Address or name of remote host', action='sendline()', loop_continue=True),
-                Statement(pattern=r'(?i)error', action=None, loop_continue=False),
-                Statement(pattern=r'(?i)timed out', action=None, loop_continue=False),
+                Statement(
+                    pattern=r'Destination filename \[.*\]\?',
+                    action='sendline()', loop_continue=True
+                ),
+                Statement(
+                    pattern=r'Do you want to over write\? \[confirm\]',
+                    action='sendline()', loop_continue=True
+                ),
+                Statement(
+                    pattern=r'\[confirm\]',
+                    action='sendline()', loop_continue=True
+                ),
+                Statement(
+                    pattern=r'Address or name of remote host',
+                    action='sendline()', loop_continue=True
+                ),
+                Statement(
+                    pattern=r'(?i)error',
+                    action=None, loop_continue=False
+                ),
+                Statement(
+                    pattern=r'(?i)timed out',
+                    action=None, loop_continue=False
+                ),
             ])
             
-            # 3. Transfer (Attempt exactly twice per user request)
+            # 3. File transfer with retry (max 2 attempts)
             max_attempts = 2
             success = False
             last_err = ""
@@ -112,9 +159,9 @@ class CiscoDistributeUnicon(UniconTask, CiscoDistributeLogicMixin):
                         success = True
                         break
                     else:
-                        last_err = f"Output: {result}"
+                        last_err = f"Attempt {attempt} output: {result[-500:]}"
                 except Exception as e:
-                    last_err = str(e)
+                    last_err = f"Attempt {attempt} exception: {str(e)}"
                     
             try:
                 pyats_device.default.log_stdout = True
@@ -122,15 +169,19 @@ class CiscoDistributeUnicon(UniconTask, CiscoDistributeLogicMixin):
                 pass
                 
             if not success:
-                return [("FAIL", f"File transfer failed after {max_attempts} attempts. Last error: {last_err}")]
+                return [("FAIL", f"File transfer failed after {max_attempts} attempts. "
+                         f"Last error: {last_err}")]
                     
-            # 4. Post-Check Verification
+            # 4. Post-transfer MD5 verification
             if expected_md5:
                 try:
-                    verify_out = pyats_device.execute(f"verify /md5 {dest_path} {expected_md5}", timeout=600)
+                    verify_out = pyats_device.execute(
+                        f"verify /md5 {dest_path} {expected_md5}", timeout=600
+                    )
                     if "Verified" not in verify_out:
-                        return [("FAIL", f"Post-download MD5 verification failed. Output: {verify_out}")]
+                        return [("FAIL", f"Post-download MD5 verification FAILED for "
+                                 f"'{file_name}'. Output: {verify_out}")]
                 except Exception as e:
                     return [("FAIL", f"MD5 verification command failed: {str(e)}")]
             
-            return [("PASS", f"Successfully distributed {file_name} to {boot_drive}")]
+            return [("PASS", f"Successfully distributed '{file_name}' to {boot_drive}")]
