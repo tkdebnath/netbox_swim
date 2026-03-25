@@ -1,0 +1,25 @@
+FROM netboxcommunity/netbox:latest
+
+# 1. Start as root to install system-level git
+USER root
+RUN apt-get update && \
+    apt-get install -y git && \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. Create the folder and set ownership to 'netbox'
+# We use netbox:root for better compatibility with Docker volumes
+RUN mkdir -p /opt/netbox/netbox_swim && \
+    chown -R netbox:root /opt/netbox/netbox_swim && \
+    chmod -R 775 /opt/netbox/netbox_swim
+
+# 3. Switch to the confirmed 'netbox' user
+USER netbox
+
+# 4. Use the cache buster to force the plugin reinstall on every push
+ARG CACHEBUST=1
+
+# 5. Copy the code from the context (/home/github/netbox_swim)
+COPY --chown=netbox:root . /opt/netbox/netbox_swim
+
+# 6. Install the plugin into the virtual environment
+RUN /opt/netbox/venv/bin/pip install --upgrade --no-cache-dir /opt/netbox/netbox_swim
