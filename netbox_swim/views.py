@@ -11,7 +11,8 @@ from . import forms, models, tables, filtersets
 # Dashboard
 # ============================================================
 
-class DashboardView(LoginRequiredMixin, View):
+class DashboardView(PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.view_softwareimage'
     def get(self, request):
         return render(request, 'netbox_swim/dashboard.html', {
             'hardware_group_count': models.HardwareGroup.objects.count(),
@@ -795,7 +796,8 @@ class DeviceSyncRecordDeleteView(generic.ObjectDeleteView):
 # Compliance Dashboard (computed on-the-fly)
 # ============================================================
 
-class ComplianceDashboardView(LoginRequiredMixin, View):
+class ComplianceDashboardView(PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.view_devicecompliance'
     """
     Iterates over all active devices, resolves each device's Hardware Group
     and Golden Image baseline, compares the synced software_version against
@@ -1018,7 +1020,8 @@ class ComplianceDashboardView(LoginRequiredMixin, View):
 # pyATS Testbed Generator
 # ============================================================
 
-class TestbedGeneratorView(LoginRequiredMixin, View):
+class TestbedGeneratorView(PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.view_upgradejob'
     """
     UI view for generating pyATS testbed YAML from NetBox devices.
     Supports filtering by site, platform, role, and individual devices.
