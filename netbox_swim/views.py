@@ -563,6 +563,80 @@ class JobLogView(generic.ObjectView):
     template_name = 'netbox_swim/joblog.html'
 
 
+class UpgradeJobDownloadFragmentView(generic.ObjectView):
+    """
+    Zips and downloads a specific folder (precheck, postcheck, diffs) for a job in-memory.
+    """
+    queryset = models.UpgradeJob.objects.all()
+
+    def get(self, request, pk, fragment):
+        import os
+        import io
+        import zipfile
+        from django.http import HttpResponse, Http404
+        from django.conf import settings
+        from django.utils import timezone as tz
+
+        job = self.get_object()
+        base_media = getattr(settings, 'MEDIA_ROOT', '/opt/netbox/netbox/media')
+        target_dir = os.path.join(base_media, 'swim', 'checks', str(job.id), fragment)
+
+        if not os.path.exists(target_dir):
+            raise Http404(f"Folder '{fragment}' does not exist for this job.")
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(target_dir):
+                for f in files:
+                    file_path = os.path.join(root, f)
+                    arcname = os.path.relpath(file_path, target_dir)
+                    zf.write(file_path, arcname)
+
+        buffer.seek(0)
+        device_name = getattr(job.device, 'name', f"device_{job.id}")
+        filename = f"{device_name}_{fragment}_{tz.now().strftime('%d%m%y')}.zip"
+        
+        response = HttpResponse(buffer.read(), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class UpgradeJobDownloadLogsView(generic.ObjectView):
+    """
+    Downloads the execution timeline (JobLogs) as a formatted plain text file.
+    """
+    queryset = models.UpgradeJob.objects.all()
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        from django.utils import timezone as tz
+
+        job = self.get_object()
+        logs = models.JobLog.objects.filter(job=job).order_by('order', 'timestamp')
+
+        content = []
+        content.append(f"EXECUTION LOGS FOR UPGRADE JOB: {job.id}")
+        content.append(f"Device: {getattr(job.device, 'name', 'Unknown')}")
+        content.append(f"Start Time: {job.start_time}")
+        content.append(f"Status: {job.status.upper()}")
+        content.append(f"{'='*50}\n")
+
+        for log in logs:
+            status_flag = "[SUCCESS]" if log.is_success else "[FAILED]" if log.is_success is False else "[INFO]"
+            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.get_action_display()}")
+            if log.log_output:
+                content.append(f"{'-'*40}\n{log.log_output.strip()}\n{'-'*40}\n")
+            else:
+                content.append("")
+
+        device_name = getattr(job.device, 'name', f"device_{job.id}")
+        filename = f"{device_name}_execution_logs_{tz.now().strftime('%d%m%y')}.txt"
+        
+        response = HttpResponse('\n'.join(content), content_type='text/plain')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class UpgradeJobDownloadChecksView(generic.ObjectView):
     """
     Serves the precheck/postcheck/diff ZIP archive for an UpgradeJob.

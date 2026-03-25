@@ -11,9 +11,20 @@
 </form>
 {% endif %}
 {% if object.logs.count or object.job_log %}
-<a href="{% url 'plugins:netbox_swim:upgradejob_download_checks' pk=object.pk %}" class="btn btn-sm btn-outline-success">
-    <i class="mdi mdi-download"></i> Download Checks Archive
-</a>
+<div class="dropdown" style="display: inline-block;">
+    <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" id="downloadsMenuButton" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        <i class="mdi mdi-download"></i> Downloads
+    </button>
+    <div class="dropdown-menu" aria-labelledby="downloadsMenuButton">
+        <a class="dropdown-item" href="{% url 'plugins:netbox_swim:upgradejob_download_logs' pk=object.pk %}"><i class="mdi mdi-text"></i> Execution Logs (.txt)</a>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item" href="{% url 'plugins:netbox_swim:upgradejob_download_fragment' pk=object.pk fragment='precheck' %}"><i class="mdi mdi-folder-zip"></i> Pre-check Output</a>
+        <a class="dropdown-item" href="{% url 'plugins:netbox_swim:upgradejob_download_fragment' pk=object.pk fragment='postcheck' %}"><i class="mdi mdi-folder-zip"></i> Post-check Output</a>
+        <a class="dropdown-item" href="{% url 'plugins:netbox_swim:upgradejob_download_fragment' pk=object.pk fragment='diffs' %}"><i class="mdi mdi-file-compare"></i> Diff Reports</a>
+        <div class="dropdown-divider"></div>
+        <a class="dropdown-item" href="{% url 'plugins:netbox_swim:upgradejob_download_checks' pk=object.pk %}"><i class="mdi mdi-package-variant-closed"></i> All Checks Archive (ZIP)</a>
+    </div>
+</div>
 {% endif %}
 <a href="{% url 'plugins:netbox_swim:upgradejob_testbed' pk=object.pk %}" class="btn btn-sm btn-outline-info">
     <i class="mdi mdi-test-tube"></i> Download Testbed
