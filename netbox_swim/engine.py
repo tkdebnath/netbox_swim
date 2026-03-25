@@ -570,9 +570,13 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
             if action == 'ping':
                 import subprocess
                 import time as _time
-                host = str(device.primary_ip.address.ip) if device.primary_ip else None
+                
+                # Check for explicit IP override from the 'Ping Target IP' UI field
+                target_override = step.extra_config.get('target_ip') if step.extra_config else None
+                host = target_override if target_override else (str(device.primary_ip.address.ip) if device.primary_ip else None)
+                
                 if not host:
-                    log_entry.log_output += "PING FAILED: Device has no Primary IP assigned.\n"
+                    log_entry.log_output += "PING FAILED: No Target IP specified and Device has no Primary IP assigned.\n"
                     log_entry.is_success = False
                     overall_success = False
                 else:
@@ -615,7 +619,8 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
 
             if action == 'wait':
                 import time as _time
-                wait_seconds = step.extra_config.get('wait_seconds', 30) if step.extra_config else 30
+                # Read 'duration' key populated by the 'Wait Duration' UI field
+                wait_seconds = step.extra_config.get('duration', 30) if step.extra_config else 30
                 log_entry.log_output += f"Waiting {wait_seconds} seconds before proceeding...\n"
                 log_entry.save()
                 _time.sleep(wait_seconds)
