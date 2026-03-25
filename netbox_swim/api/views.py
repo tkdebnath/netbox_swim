@@ -222,6 +222,79 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
+    @action(detail=True, methods=['get'])
+    def download_fragment(self, request, pk=None):
+        """
+        Dynamically zip and download a specific folder layer (precheck, postcheck, diffs) via REST API.
+        Takes `?fragment=precheck` as a query parameter.
+        """
+        import os
+        import io
+        import zipfile
+        from django.http import HttpResponse
+        from django.conf import settings
+        from django.utils import timezone as tz
+
+        fragment = request.query_params.get('fragment')
+        if not fragment or fragment not in ['precheck', 'postcheck', 'diffs']:
+            return Response({"error": "Query param '?fragment=' is missing or invalid. Use [precheck, postcheck, diffs]."}, status=400)
+
+        job = self.get_object()
+        base_media = getattr(settings, 'MEDIA_ROOT', '/opt/netbox/netbox/media')
+        target_dir = os.path.join(base_media, 'swim', 'checks', str(job.id), fragment)
+
+        if not os.path.exists(target_dir):
+            return Response({"error": f"Folder '{fragment}' does not exist on disk for this job."}, status=404)
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(target_dir):
+                for f in files:
+                    file_path = os.path.join(root, f)
+                    arcname = os.path.relpath(file_path, target_dir)
+                    zf.write(file_path, arcname)
+
+        buffer.seek(0)
+        device_name = getattr(job.device, 'name', f"device_{job.id}")
+        filename = f"{device_name}_{fragment}_{tz.now().strftime('%d%m%y')}.zip"
+        
+        response = HttpResponse(buffer.read(), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=['get'])
+    def download_logs(self, request, pk=None):
+        """
+        Return the Execution Log Timeline as a downloadable, formatted plain text file.
+        """
+        from django.http import HttpResponse
+        from django.utils import timezone as tz
+
+        job = self.get_object()
+        logs = job.logs.all().order_by('order', 'timestamp')
+
+        content = []
+        content.append(f"EXECUTION LOGS FOR UPGRADE JOB: {job.id}")
+        content.append(f"Device: {getattr(job.device, 'name', 'Unknown')}")
+        content.append(f"Start Time: {job.start_time}")
+        content.append(f"Status: {job.status.upper()}")
+        content.append(f"{'='*50}\n")
+
+        for log in logs:
+            status_flag = "[SUCCESS]" if log.is_success else "[FAILED]" if log.is_success is False else "[INFO]"
+            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.get_action_display()}")
+            if log.log_output:
+                content.append(f"{'-'*40}\n{log.log_output.strip()}\n{'-'*40}\n")
+            else:
+                content.append("")
+
+        device_name = getattr(job.device, 'name', f"device_{job.id}")
+        filename = f"{device_name}_execution_logs_{tz.now().strftime('%d%m%y')}.txt"
+        
+        response = HttpResponse('\n'.join(content), content_type='text/plain')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
 class JobLogViewSet(NetBoxModelViewSet):
     queryset = models.JobLog.objects.select_related('job')
     serializer_class = serializers.JobLogSerializer
