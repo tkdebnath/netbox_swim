@@ -437,6 +437,12 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
     except UpgradeJob.DoesNotExist:
         return f"UpgradeJob {job_id} not found"
 
+    # Restore execution context if stored during scheduling
+    if not dry_run and upgrade.extra_config:
+        dry_run = upgrade.extra_config.get('dry_run', False)
+    if not mock_run and upgrade.extra_config:
+        mock_run = upgrade.extra_config.get('mock_run', False)
+
     device = upgrade.device
 
     # --- Safety Check: Prevent Concurrent Jobs on Same Device ---
