@@ -2,6 +2,7 @@ from netbox.views import generic
 from django.views.generic import View
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from dcim.models import Device
 import django_rq
 from . import forms, models, tables, filtersets
@@ -10,7 +11,7 @@ from . import forms, models, tables, filtersets
 # Dashboard
 # ============================================================
 
-class DashboardView(View):
+class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         return render(request, 'netbox_swim/dashboard.html', {
             'hardware_group_count': models.HardwareGroup.objects.count(),
@@ -32,7 +33,8 @@ class DashboardView(View):
 # Device Sync Action
 # ============================================================
 
-class DeviceSyncExecuteView(View):
+class DeviceSyncExecuteView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.change_devicesyncrecord'
     def post(self, request, pk):
         device = get_object_or_404(Device, pk=pk)
         
@@ -57,7 +59,8 @@ class DeviceSyncExecuteView(View):
         
         return redirect(device.get_absolute_url())
 
-class BulkSyncFormView(View):
+class BulkSyncFormView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.change_devicesyncrecord'
     def get(self, request):
         form = forms.BulkSyncForm()
         return render(request, 'netbox_swim/bulksync.html', {
@@ -112,7 +115,8 @@ class BulkSyncFormView(View):
 
         return render(request, 'netbox_swim/bulksync.html', {'form': form})
 
-class BulkUpgradeFormView(View):
+class BulkUpgradeFormView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.add_upgradejob'
     def get(self, request):
         form = forms.BulkUpgradeForm()
         return render(request, 'netbox_swim/bulkupgrade.html', {
@@ -791,7 +795,7 @@ class DeviceSyncRecordDeleteView(generic.ObjectDeleteView):
 # Compliance Dashboard (computed on-the-fly)
 # ============================================================
 
-class ComplianceDashboardView(View):
+class ComplianceDashboardView(LoginRequiredMixin, View):
     """
     Iterates over all active devices, resolves each device's Hardware Group
     and Golden Image baseline, compares the synced software_version against
@@ -1014,7 +1018,7 @@ class ComplianceDashboardView(View):
 # pyATS Testbed Generator
 # ============================================================
 
-class TestbedGeneratorView(View):
+class TestbedGeneratorView(LoginRequiredMixin, View):
     """
     UI view for generating pyATS testbed YAML from NetBox devices.
     Supports filtering by site, platform, role, and individual devices.
