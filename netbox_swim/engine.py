@@ -659,8 +659,8 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
             if mock_run:
                 log_entry.log_output += f"\n[MOCK RUN] Mocking {action} step. No real connections established.\n"
                 log_entry.is_success = True
-            elif dry_run and action in ['distribution', 'activation']:
-                log_entry.log_output += f"\n[DRY RUN] Bypassing actual image {action} logic.\n"
+            elif dry_run and action in ['distribution', 'activation', 'verification']:
+                log_entry.log_output += f"\n[DRY RUN] Bypassing actual {action} logic (State manipulation disabled).\n"
                 log_entry.is_success = True
             else:
                 if action in ['precheck', 'postcheck']:
