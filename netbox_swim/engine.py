@@ -598,6 +598,8 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                     
                     if reachable:
                         log_entry.log_output += f"\nPING SUCCESS: {host} is reachable.\n"
+                        log_entry.log_output += "Waiting 30s for device to fully initialize...\n"
+                        _time.sleep(30)
                         log_entry.is_success = True
                     else:
                         log_entry.log_output += f"\nPING FAILED: {host} unreachable after {retries} attempts.\n"
