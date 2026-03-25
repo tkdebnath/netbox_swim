@@ -279,7 +279,7 @@ class WorkflowStep(NetBoxModel):
         WAIT = 'wait', 'Wait Timer'
         PING = 'ping', 'Ping Reachability'
         POSTCHECK = 'postcheck', 'Post-Upgrade Validation'
-        VERIFICATION = 'verification', 'Verify Health Integrity'
+        VERIFICATION = 'verification', 'Verify Software Version'
         REPORT = 'report', 'Generate Report'
 
     template = models.ForeignKey(WorkflowTemplate, on_delete=models.CASCADE, related_name='steps')
