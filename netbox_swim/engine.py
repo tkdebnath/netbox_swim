@@ -521,6 +521,7 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
     from .tasks.distribution.cisco import CiscoDistributeScrapli, CiscoDistributeNetmiko, CiscoDistributeUnicon
     from .tasks.activation.cisco import CiscoActivateScrapli, CiscoActivateNetmiko, CiscoActivateUnicon
     from .tasks.checks.cisco import CiscoChecksScrapli, CiscoChecksNetmiko, CiscoChecksUnicon
+    from .tasks.verification.cisco import CiscoVerifyScrapli, CiscoVerifyNetmiko, CiscoVerifyUnicon
     
     TASK_REGISTRY = {
         'readiness': {'scrapli': ReadinessCiscoScrapli, 'netmiko': ReadinessCiscoNetmiko, 'unicon': ReadinessCiscoUnicon},
@@ -528,6 +529,7 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
         'activation': {'scrapli': CiscoActivateScrapli, 'netmiko': CiscoActivateNetmiko, 'unicon': CiscoActivateUnicon},
         'precheck': {'scrapli': CiscoChecksScrapli, 'netmiko': CiscoChecksNetmiko, 'unicon': CiscoChecksUnicon},
         'postcheck': {'scrapli': CiscoChecksScrapli, 'netmiko': CiscoChecksNetmiko, 'unicon': CiscoChecksUnicon},
+        'verification': {'scrapli': CiscoVerifyScrapli, 'netmiko': CiscoVerifyNetmiko, 'unicon': CiscoVerifyUnicon},
     }
 
     overall_success = True
@@ -620,57 +622,6 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                 log_entry.log_output += f"Wait complete ({wait_seconds}s elapsed).\n"
                 log_entry.is_success = True
                 log_entry.save()
-                continue
-
-            if action == 'verification':
-                # Post-activation version verification
-                # Connects to device, parses show version, compares to target
-                target_version = target_image.version if target_image else None
-                if not target_version:
-                    log_entry.log_output += "No target image version defined. Skipping verification.\n"
-                    log_entry.is_success = True
-                    log_entry.save()
-                    continue
-
-                log_entry.log_output += f"Starting Post-Activation Verification... Target Version: {target_version}\n"
-
-                try:
-                    from .tasks.base import UniconTask
-                    verifier = UniconTask()
-                    with verifier.connect(device, connection_timeout=60) as pyats_device:
-                        log_entry.log_output += f"Connected to {device.name}. Retrieving version...\n"
-                        output = pyats_device.parse('show version')
-
-                        current_version = None
-                        if isinstance(output, dict):
-                            ver_block = output.get('version', {})
-                            if isinstance(ver_block, dict):
-                                current_version = ver_block.get('version') or ver_block.get('version_short')
-                            elif isinstance(ver_block, str):
-                                current_version = ver_block
-
-                        if not current_version:
-                            log_entry.log_output += "Failed to parse version from device output.\n"
-                            log_entry.is_success = False
-                            overall_success = False
-                        elif str(current_version).strip().lower() == str(target_version).strip().lower():
-                            log_entry.log_output += f"Device Running Version: {current_version}\n"
-                            log_entry.log_output += f"VERIFICATION PASSED: Version matches target ({target_version}).\n"
-                            log_entry.is_success = True
-                        else:
-                            log_entry.log_output += f"Device Running Version: {current_version}\n"
-                            log_entry.log_output += f"VERIFICATION FAILED: Expected {target_version}, found {current_version}.\n"
-                            log_entry.is_success = False
-                            overall_success = False
-
-                except Exception as e:
-                    log_entry.log_output += f"Verification error: {str(e)}\n"
-                    log_entry.is_success = False
-                    overall_success = False
-
-                log_entry.save()
-                if not overall_success:
-                    break
                 continue
 
             # --- Task Registry steps (require SSH connection) ---
