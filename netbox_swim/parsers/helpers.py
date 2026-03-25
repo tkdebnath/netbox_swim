@@ -22,12 +22,18 @@ def get_ios_management_context(running_config: str, interface_output: str, ip_ad
     # 2. Split config into individual interface blocks
     blocks = running_config.split("\ninterface ")
     
+    # Initialize tracking variables outside loop
+    found_target_match = False
+
     for block in blocks:
         if not block.strip():
             continue
             
         lines = block.splitlines()
         intf_name = lines[0].strip()
+        
+        # Check if interface is administratively down
+        is_shutdown = any(line.strip().lower() == 'shutdown' for line in lines)
         
         # We need to find the IP and VRF of either the explicit TACACS target, or the fallback IP
         ip_found = False
@@ -50,20 +56,29 @@ def get_ios_management_context(running_config: str, interface_output: str, ip_ad
                 
         # Condition A: We found the explicitly configured TACACS source interface
         if target_interface and intf_name.lower() == str(target_interface).lower():
+            if is_shutdown:
+                continue # Skip shutdown interfaces
+                
+            found_target_match = True
             context['interface'] = intf_name
-            context['ip_address'] = block_ip
             context['vrf'] = vrf_name
-            return context
+            if block_ip:
+                context['ip_address'] = block_ip
+                return context # Fully resolved!
+            # If there's no IP in the config block, we do NOT return yet. Let it fall through to 'show interface' parsing
+            break
             
         # Condition B: No explicit TACACS config, but this interface has the fallback IP we used to connect
         if not target_interface and ip_found:
+            if is_shutdown:
+                continue
             context['interface'] = intf_name
             context['vrf'] = vrf_name
-            # Don't return yet, just in case there's an explicit config later (though blocks split prevents this generally)
             return context
             
-    # Fallback to looking in the 'show interface' output if the IP wasn't in the running config
-    if interface_output and target_interface:
+    # Condition C: TACACS source interface is configured but IP address is not found in running config.
+    # We fallback to looking in the 'show interface' output if the IP wasn't in the running config
+    if interface_output and target_interface and found_target_match:
         context['interface'] = target_interface
         # Naive IP extraction from show interface block
         match = re.search(rf'{target_interface}.*?Internet address is ([0-9.]+)', interface_output, re.IGNORECASE | re.DOTALL)
