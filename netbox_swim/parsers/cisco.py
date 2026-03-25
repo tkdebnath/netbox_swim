@@ -148,6 +148,7 @@ class CiscoShowTacacsParser(BaseCommandParser):
     Expects self.raw_string to be instantiated as a dictionary:
     {
         'run': '<raw show running-config>',
+        'interface': '<raw show interface>',
         'fallback_ip': '10.0.0.1'     # The IP Scrapli actually used to connect
     }
     """
@@ -161,18 +162,19 @@ class CiscoShowTacacsParser(BaseCommandParser):
     def get_facts(self):
         # 1. Gather inputs configured in your Multi-Stage parser
         run_output = self.raw_string.get('run', '')
+        interface_output = self.raw_string.get('interface', '')
         fallback_ip = self.raw_string.get('fallback_ip', '')
 
         # 2. Pull your standalone helper function
         from .helpers import get_ios_management_context
         
         # 3. Process the huge config block cleanly.
-        context = get_ios_management_context(run_output, fallback_ip)
+        context = get_ios_management_context(run_output, interface_output, fallback_ip)
         
         if context:
-            self.structured_facts['tacacs_source_interface'] = context['interface']
-            self.structured_facts['tacacs_source_ip'] = context['ip_address']
-            self.structured_facts['vrf'] = context['vrf']
+            self.structured_facts['tacacs_source_interface'] = context.get('interface')
+            self.structured_facts['tacacs_source_ip'] = context.get('ip_address')
+            self.structured_facts['vrf'] = context.get('vrf')
 
         return self.structured_facts
 

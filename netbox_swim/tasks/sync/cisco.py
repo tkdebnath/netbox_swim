@@ -148,11 +148,13 @@ class SyncCiscoIosDeviceScrapli(ScrapliTask, CiscoSyncLogicMixin):
             
             # --- 3. TACACS Execution ---
             response_run = conn.send_command("show running-config")
+            response_interface = conn.send_command("show interface")
             
             # Extract IP from NetBox object
             fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
             tacacs_dict = {
                 'run': response_run.result,
+                'interface': response_interface.result,
                 'fallback_ip': fallback_ip
             }
             
@@ -195,11 +197,13 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
             
             # --- 3. TACACS Execution ---
             response_run = conn.send_command("show running-config")
+            response_interface = conn.send_command("show interface")
             
             # Extract IP from NetBox object
             fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
             tacacs_dict = {
                 'run': response_run,
+                'interface': response_interface,
                 'fallback_ip': fallback_ip
             }
             
@@ -240,11 +244,13 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
             
             # --- 3. TACACS Execution ---
             response_run = conn.execute("show running-config")
+            response_interface = conn.execute("show interface")
             
             # Extract IP from NetBox object
             fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
             tacacs_dict = {
                 'run': response_run,
+                'interface': response_interface,
                 'fallback_ip': fallback_ip
             }
             
