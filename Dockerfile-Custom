@@ -22,4 +22,4 @@ ARG CACHEBUST=1
 COPY --chown=netbox:root . /opt/netbox/netbox_swim
 
 # 6. Install the plugin into the virtual environment
-RUN /opt/netbox/venv/bin/pip install --upgrade --no-cache-dir /opt/netbox/netbox_swim
+RUN /usr/local/bin/uv pip install --upgrade --no-cache-dir /opt/netbox/netbox_swim
