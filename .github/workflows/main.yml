@@ -1,0 +1,34 @@
+name: NetBox SWIM Plugin Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Check out latest code
+        uses: actions/checkout@v4
+
+      - name: Sync code to Production Folder
+        run: |
+          # Mirror the fresh code into the deployment folder
+          rsync -avz --delete ./ /home/github/netbox_swim/
+
+      - name: Build and Restart NetBox
+        run: |
+          # Move to the infrastructure directory
+          cd /home/github/netbox-docker
+          
+          # Build with a unique timestamp to force the plugin reinstall
+          docker compose build --build-arg CACHEBUST=$(date +%s) netbox
+          
+          # Restart the container
+          docker compose up -d netbox
+
+      - name: Run Database Migrations
+        run: |
+          # Ensure any new tables/fields in your plugin are created
+          docker exec netbox-docker-netbox-1 python3 manage.py migrate
+          docker exec netbox-docker-netbox-1 python3 manage.py clear_cache
