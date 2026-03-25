@@ -20,7 +20,7 @@ class CiscoVerifyUnicon(UniconTask):
     """
     
     # Define which device platforms support verification using Unicon/Genie
-    SUPPORTED_PLATFORMS = ['ios', 'iosxe', 'iosxr', 'nxos']
+    SUPPORTED_PLATFORMS = ['ios', 'iosxe', 'nxos']
 
     def execute(self, device, target_image=None, **kwargs):
         if not target_image or not target_image.version:

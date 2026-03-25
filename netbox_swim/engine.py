@@ -709,7 +709,13 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
         
         log_entry.save()
         if not overall_success:
-            break
+            # We generally halt the pipeline if a step fails (e.g., Readiness/Distribution).
+            # However, we want to ensure Post-Checks and Reports ALWAYS run even if 
+            # Verification fails, so we can gather crucial state diffs for debugging.
+            if action in ['verification', 'postcheck', 'report']:
+                logger.warning(f"[Engine] Step '{action}' failed, but continuing pipeline to gather artifacts.")
+            else:
+                break
 
     # Finalize Job and Generate Zip Payload
     try:
