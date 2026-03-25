@@ -564,11 +564,54 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
         action = step.action_type
         
         try:
-            # We skip execution if we don't have a mapped task (e.g., ping, wait)
+            # --- Inline handlers for steps that don't need SSH connections ---
+            if action == 'ping':
+                import subprocess
+                host = str(device.primary_ip.address.ip) if device.primary_ip else None
+                if not host:
+                    log_entry.log_output += "PING FAILED: Device has no Primary IP assigned.\n"
+                    log_entry.is_success = False
+                    overall_success = False
+                else:
+                    ping_count = step.extra_config.get('ping_count', 3) if step.extra_config else 3
+                    ping_timeout = step.extra_config.get('ping_timeout', 5) if step.extra_config else 5
+                    log_entry.log_output += f"Pinging {host} ({ping_count} packets, {ping_timeout}s timeout)...\n"
+                    
+                    result = subprocess.run(
+                        ['ping', '-c', str(ping_count), '-W', str(ping_timeout), host],
+                        capture_output=True, text=True, timeout=ping_timeout * ping_count + 10
+                    )
+                    log_entry.log_output += result.stdout
+                    if result.returncode == 0:
+                        log_entry.log_output += f"\nPING SUCCESS: {host} is reachable.\n"
+                        log_entry.is_success = True
+                    else:
+                        log_entry.log_output += f"\nPING FAILED: {host} is unreachable.\n"
+                        if result.stderr:
+                            log_entry.log_output += result.stderr
+                        log_entry.is_success = False
+                        overall_success = False
+
+                log_entry.save()
+                if not overall_success:
+                    break
+                continue
+
+            if action == 'wait':
+                import time as _time
+                wait_seconds = step.extra_config.get('wait_seconds', 30) if step.extra_config else 30
+                log_entry.log_output += f"Waiting {wait_seconds} seconds before proceeding...\n"
+                log_entry.save()
+                _time.sleep(wait_seconds)
+                log_entry.log_output += f"Wait complete ({wait_seconds}s elapsed).\n"
+                log_entry.is_success = True
+                log_entry.save()
+                continue
+
+            # --- Task Registry steps (require SSH connection) ---
             if action not in TASK_REGISTRY:
                 log_entry.log_output += f"No mapped Engine Task for {action}. Simulating success.\n"
                 log_entry.is_success = True
-                # log_entry.result = 'completed'
                 log_entry.save()
                 continue
                 
