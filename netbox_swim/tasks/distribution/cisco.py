@@ -193,11 +193,11 @@ class CiscoDistributeUnicon(UniconTask):
                     action='sendline()', loop_continue=True
                 ),
                 Statement(
-                    pattern=r'(?i)error',
+                    pattern=r'%Error|TFTP .*error|Connection refused|No such file',
                     action=None, loop_continue=False
                 ),
                 Statement(
-                    pattern=r'(?i)timed out',
+                    pattern=r'(?i)timed out|(?i)connection timed out',
                     action=None, loop_continue=False
                 ),
             ])
@@ -222,6 +222,9 @@ class CiscoDistributeUnicon(UniconTask):
                         last_err = f"Attempt {attempt} output: {result[-500:]}"
                 except Exception as e:
                     last_err = f"Attempt {attempt} exception: {str(e)}"
+                    if attempt < max_attempts:
+                        import time
+                        time.sleep(10)  # Let device recover before retry
                     
             try:
                 pyats_device.default.log_stdout = True
