@@ -1,5 +1,5 @@
 import django_tables2 as tables
-from netbox.tables import NetBoxTable, ChoiceFieldColumn
+from netbox.tables import NetBoxTable, ChoiceFieldColumn, columns
 from . import models
 from .models import (
     SoftwareImage,
@@ -122,7 +122,7 @@ class JobLogTable(NetBoxTable):
         fields = ('pk', 'id', 'job', 'action_type', 'step', 'is_success', 'log_output', 'timestamp')
         default_columns = ('job', 'action_type', 'step', 'is_success', 'timestamp')
 
-from netbox.tables import columns
+
 
 class DeviceSyncRecordTable(NetBoxTable):
     device = tables.Column(linkify=True)
