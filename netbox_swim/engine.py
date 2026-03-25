@@ -663,8 +663,28 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                 else:
                     # Execute Distribution, Activation, Readiness
                     report_blob = executor.execute(device, target_image)
-                    log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + str(report_blob)
-                    log_entry.is_success = True
+                    
+                    # Format output based on return type
+                    if isinstance(report_blob, list):
+                        # Readiness returns list of (status, message) tuples
+                        formatted = "\n".join(f"[{s.upper()}] {m}" for s, m in report_blob)
+                        log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + formatted
+                        
+                        # Check for failures in readiness results
+                        failure_indicators = {'failed', 'fail', 'error'}
+                        has_failure = any(
+                            s.lower() in failure_indicators 
+                            for s, m in report_blob 
+                            if isinstance(s, str)
+                        )
+                        if has_failure:
+                            log_entry.is_success = False
+                            overall_success = False
+                        else:
+                            log_entry.is_success = True
+                    else:
+                        log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + str(report_blob)
+                        log_entry.is_success = True
 
         except Exception as e:
             overall_success = False
