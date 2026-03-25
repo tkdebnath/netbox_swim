@@ -2,9 +2,12 @@ import re
 
 def get_ios_management_context(running_config: str, interface_output: str, ip_address: str) -> dict:
     """
-    Scans the running config block to locate the configured TACACS source interface.
-    If found, it returns that interface, its IP, and its VRF.
-    If NOT found, it falls back to finding which Interface possesses the specified IP address (the management connection IP).
+    Evaluates TACACS source-interface logic:
+    1. Checks if global tacacs source-interface exists.
+    2. If it does, checks if it is not shutdown.
+    3. Records VRF and IP (if static).
+    4. If DHCP, polls 'show interface' output for dynamic IP.
+    5. If anything fails (shutdown, no IP found), falls back to finding the interface that owns the connection IP.
     """
     context = {
         'interface': None,
@@ -15,74 +18,97 @@ def get_ios_management_context(running_config: str, interface_output: str, ip_ad
     if not running_config:
         return context
 
-    # 1. Look for explicit TACACS source interface configuration
-    tacacs_match = re.search(r'(?:ip tacacs|tacacs-server)\s+source-interface\s+([A-Za-z0-9/.-]+)', running_config, re.IGNORECASE)
-    target_interface = tacacs_match.group(1) if tacacs_match else None
+    # --- Pre-parse 'show interface' to map dynamically assigned IPs cleanly ---
+    show_intf_ips = {}
+    if interface_output:
+        current_intf = None
+        for line in interface_output.splitlines():
+            if line and not line[0].isspace():
+                # E.g. "Vlan100 is up, line protocol is up"
+                current_intf = line.split(" is ")[0].strip().lower()
+            elif current_intf and 'Internet address is ' in line:
+                match = re.search(r'Internet address is ([0-9.]+)', line)
+                if match:
+                    show_intf_ips[current_intf] = match.group(1)
 
-    # 2. Split config into individual interface blocks
-    blocks = running_config.split("\ninterface ")
+    # --- Pre-parse 'show running-config' into interface dictionaries ---
+    parsed_ints = {}
+    fallback_intf = None
     
-    # Initialize tracking variables outside loop
-    found_target_match = False
-
+    blocks = running_config.split("\ninterface ")
     for block in blocks:
         if not block.strip():
             continue
             
         lines = block.splitlines()
         intf_name = lines[0].strip()
+        intf_key = intf_name.lower()
         
-        # Check if interface is administratively down
         is_shutdown = any(line.strip().lower() == 'shutdown' for line in lines)
-        
-        # We need to find the IP and VRF of either the explicit TACACS target, or the fallback IP
-        ip_found = False
-        vrf_name = ''
+        is_dhcp = any('ip address dhcp' in line.strip().lower() for line in lines)
         block_ip = ''
+        vrf_name = ''
+        has_fallback = False
         
         for line in lines[1:]:
             line_str = line.strip().lower()
-            if line_str.startswith('ip address '):
-                # E.g. "ip address 10.0.0.1 255.255.255.0"
+            if line_str.startswith('ip address ') and 'dhcp' not in line_str:
                 parts = line_str.split()
                 if len(parts) >= 3:
                     block_ip = parts[2]
                 if ip_address and ip_address in line_str:
-                    ip_found = True
+                    has_fallback = True
             elif line_str.startswith('vrf forwarding '):
                 vrf_name = line.strip().split('vrf forwarding ')[-1].strip()
             elif line_str.startswith('ip vrf forward '):
                 vrf_name = line.strip().split('ip vrf forward ')[-1].strip()
                 
-        # Condition A: We found the explicitly configured TACACS source interface
-        if target_interface and intf_name.lower() == str(target_interface).lower():
-            if is_shutdown:
-                continue # Skip shutdown interfaces
-                
-            found_target_match = True
-            context['interface'] = intf_name
-            context['vrf'] = vrf_name
-            if block_ip:
-                context['ip_address'] = block_ip
-                return context # Fully resolved!
-            # If there's no IP in the config block, we do NOT return yet. Let it fall through to 'show interface' parsing
-            break
+        parsed_data = {
+            'name': intf_name,
+            'shutdown': is_shutdown,
+            'ip': block_ip,
+            'dhcp': is_dhcp,
+            'vrf': vrf_name,
+            'has_fallback': has_fallback
+        }
+        parsed_ints[intf_key] = parsed_data
+        
+        if has_fallback:
+            fallback_intf = parsed_data
+
+    # --- 1. Evaluate Global TACACS configuration ---
+    tacacs_match = re.search(r'(?:ip tacacs|tacacs-server)\s+source-interface\s+([A-Za-z0-9/.-]+)', running_config, re.IGNORECASE)
+    target_intf = tacacs_match.group(1).lower() if tacacs_match else None
+
+    if target_intf and target_intf in parsed_ints:
+        t_data = parsed_ints[target_intf]
+        
+        if not t_data['shutdown']:
+            target_ip = t_data['ip']
+            if not target_ip and t_data['dhcp']:
+                target_ip = show_intf_ips.get(target_intf)
             
-        # Condition B: No explicit TACACS config, but this interface has the fallback IP we used to connect
-        if not target_interface and ip_found:
-            if is_shutdown:
-                continue
-            context['interface'] = intf_name
-            context['vrf'] = vrf_name
-            return context
-            
-    # Condition C: TACACS source interface is configured but IP address is not found in running config.
-    # We fallback to looking in the 'show interface' output if the IP wasn't in the running config
-    if interface_output and target_interface and found_target_match:
-        context['interface'] = target_interface
-        # Naive IP extraction from show interface block
-        match = re.search(rf'{target_interface}.*?Internet address is ([0-9.]+)', interface_output, re.IGNORECASE | re.DOTALL)
-        if match:
-            context['ip_address'] = match.group(1)
+            if target_ip:
+                context['interface'] = str(t_data['name'])
+                context['ip_address'] = str(target_ip)
+                context['vrf'] = str(t_data['vrf'])
+                return context
+
+    # --- 2. Fallback execution if global target failed or missing ---
+    # Find the interface matching the connection 'fallback' IP explicitly
+    if fallback_intf and not fallback_intf['shutdown']:
+        context['interface'] = str(fallback_intf['name'])
+        context['ip_address'] = str(fallback_intf['ip'] or ip_address)
+        context['vrf'] = str(fallback_intf['vrf'])
+        return context
+
+    # --- 3. Final Fallback (If fallback connection IP was assigned purely via DHCP) ---
+    if ip_address:
+        for intf_key, intf_data in parsed_ints.items():
+            if intf_data['dhcp'] and not intf_data['shutdown']:
+                if show_intf_ips.get(intf_key) == ip_address:
+                    context['interface'] = str(intf_data['name'])
+                    context['vrf'] = str(intf_data['vrf'])
+                    return context
 
     return context
