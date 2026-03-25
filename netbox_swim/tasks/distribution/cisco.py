@@ -22,12 +22,22 @@ class CiscoDistributeNetmiko(NetmikoTask):
 
 class CiscoDistributeUnicon(UniconTask):
     """
-    Distributes firmware to Cisco IOS/IOS-XE devices via HTTP file copy.
+    Distributes firmware to Cisco IOS/IOS-XE devices.
     
     Supported platforms: IOS, IOS-XE
-    Supported protocols: HTTP
     NX-OS, EOS, Junos: Not yet implemented (will abort cleanly).
+    
+    Protocol support is extensible via the dispatch pattern:
+      - To add SCP:  implement _build_copy_cmd_scp()
+      - To add TFTP: implement _build_copy_cmd_tftp()
+      - To add SFTP: implement _build_copy_cmd_sftp()
+    Then add the protocol name to SUPPORTED_PROTOCOLS.
     """
+    
+    # -------------------------------------------------------
+    # Protocol Registry — add new protocols here
+    # -------------------------------------------------------
+    SUPPORTED_PROTOCOLS = {'http', 'https'}
     
     def _resolve_os_family(self, device):
         """Resolve OS family from PLATFORM_MAPPINGS."""
@@ -39,6 +49,58 @@ class CiscoDistributeUnicon(UniconTask):
             return 'iosxe'
         return genie_os
 
+    # -------------------------------------------------------
+    # Copy Command Builders — one per protocol
+    # -------------------------------------------------------
+    # To add a new protocol (e.g., SCP), simply:
+    #   1. Add 'scp' to SUPPORTED_PROTOCOLS above
+    #   2. Implement _build_copy_cmd_scp() below
+    #   That's it — execute() will auto-dispatch.
+    
+    def _build_copy_cmd_http(self, fs, file_name, dest_path):
+        """Build IOS copy command for HTTP/HTTPS transfers."""
+        protocol = fs.protocol.lower()
+        auth_str = f"{fs.username}:{fs.password}@" if fs.username else ""
+        port_str = f":{fs.port}" if fs.port else ""
+        base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
+        return f"copy {protocol}://{auth_str}{fs.ip_address}{port_str}/{base_path}{file_name} {dest_path}"
+    
+    # Alias — HTTPS uses same syntax as HTTP
+    _build_copy_cmd_https = _build_copy_cmd_http
+    
+    # ----- FUTURE: Uncomment and implement when needed -----
+    #
+    # def _build_copy_cmd_scp(self, fs, file_name, dest_path):
+    #     """Build IOS copy command for SCP transfers."""
+    #     auth_str = f"{fs.username}@" if fs.username else ""
+    #     base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
+    #     return f"copy scp://{auth_str}{fs.ip_address}/{base_path}{file_name} {dest_path}"
+    #
+    # def _build_copy_cmd_tftp(self, fs, file_name, dest_path):
+    #     """Build IOS copy command for TFTP transfers."""
+    #     base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
+    #     return f"copy tftp://{fs.ip_address}/{base_path}{file_name} {dest_path}"
+    #
+    # def _build_copy_cmd_sftp(self, fs, file_name, dest_path):
+    #     """Build IOS copy command for SFTP transfers."""
+    #     auth_str = f"{fs.username}@" if fs.username else ""
+    #     base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
+    #     return f"copy sftp://{auth_str}{fs.ip_address}/{base_path}{file_name} {dest_path}"
+    #
+    # Then add to SUPPORTED_PROTOCOLS: {'http', 'https', 'scp', 'tftp', 'sftp'}
+    # -------------------------------------------------------
+
+    def _get_copy_command(self, protocol, fs, file_name, dest_path):
+        """Dispatch to the correct protocol builder method."""
+        method_name = f"_build_copy_cmd_{protocol}"
+        builder = getattr(self, method_name, None)
+        if not builder:
+            return None, f"Protocol '{protocol}' has no command builder. Implement {method_name}()."
+        return builder(fs, file_name, dest_path), None
+
+    # -------------------------------------------------------
+    # Main Execution
+    # -------------------------------------------------------
     def execute(self, device, target_image=None, **kwargs):
         if not target_image:
             return [("FAIL", "No target image assigned. Cannot distribute.")]
@@ -56,23 +118,21 @@ class CiscoDistributeUnicon(UniconTask):
             return [("FAIL", f"Target image '{target_image.image_name}' is not assigned to a File Server. "
                      f"Assign a File Server to this Software Image before running distribution.")]
         
-        # --- Protocol gate ---
+        # --- Protocol dispatch ---
         protocol = fs.protocol.lower() if fs.protocol else 'http'
-        if protocol not in ('http', 'https'):
+        if protocol not in self.SUPPORTED_PROTOCOLS:
             return [("FAIL", f"Protocol '{protocol}' is not yet implemented for distribution. "
-                     f"Currently supported: HTTP/HTTPS. "
-                     f"Update File Server '{fs.name}' or use HTTP.")]
+                     f"Currently supported: {', '.join(sorted(self.SUPPORTED_PROTOCOLS)).upper()}. "
+                     f"Update File Server '{fs.name}' or use a supported protocol.")]
         
-        # --- Build copy command ---
+        # --- Build copy command via dispatch ---
         boot_drive = self._get_boot_drive(device, target_image)
         file_name = target_image.image_file_name
         dest_path = f"{boot_drive}{file_name}"
         
-        auth_str = f"{fs.username}:{fs.password}@" if fs.username else ""
-        port_str = f":{fs.port}" if fs.port else ""
-        base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
-
-        cmd = f"copy {protocol}://{auth_str}{fs.ip_address}{port_str}/{base_path}{file_name} {dest_path}"
+        cmd, error = self._get_copy_command(protocol, fs, file_name, dest_path)
+        if error:
+            return [("FAIL", error)]
         
         expected_size = getattr(target_image, 'file_size_bytes', None)
         expected_md5 = getattr(target_image, 'hash_md5', None) or ""
@@ -84,7 +144,7 @@ class CiscoDistributeUnicon(UniconTask):
         with self.connect(device, connection_timeout=300) as pyats_device:
             
             # Configure HTTP client source interface (VRF routing)
-            if tacacs_intf:
+            if tacacs_intf and protocol in ('http', 'https'):
                 try:
                     pyats_device.configure(
                         f"ip http client source-interface {tacacs_intf}", timeout=30
