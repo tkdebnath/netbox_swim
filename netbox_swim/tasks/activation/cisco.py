@@ -66,9 +66,39 @@ class CiscoActivateUnicon(UniconTask):
                 return self._activate_bundle_mode(pyats_device, dest_path, file_name, mode)
 
     def _activate_install_mode(self, pyats_device, dest_path, file_name):
-        """INSTALL mode: install add file <path> activate commit"""
+        """
+        INSTALL mode activation (Catalyst 9300).
+        Aligned with reference: catalyst9300_strategy.py
+        """
         from unicon.eal.dialogs import Dialog, Statement
 
+        # 1. Configure boot parameters (hardening)
+        try:
+            config_cmd = [
+                "no boot system",
+                "boot system flash:packages.conf",
+                "no boot manual",
+                "no system ignore startupconfig switch all",
+            ]
+            pyats_device.configure(config_cmd, timeout=30)
+        except Exception as e:
+            logger.warning(f"Boot configuration warning: {e}")
+
+        # 2. Save config
+        try:
+            save_dialog = Dialog([
+                Statement(
+                    pattern=r'Destination filename \[startup-config\]\?',
+                    action='sendline()', loop_continue=False, continue_timer=False
+                ),
+            ])
+            pyats_device.execute(
+                "copy running-config startup-config", timeout=60, reply=save_dialog
+            )
+        except Exception as e:
+            logger.warning(f"Config save warning: {e}")
+
+        # 3. Run install command
         cmd = f"install add file {dest_path} activate commit"
 
         dialog = Dialog([
