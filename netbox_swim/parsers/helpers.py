@@ -55,7 +55,7 @@ def get_ios_management_context(running_config: str, interface_output: str, ip_ad
             if line_str.startswith('ip address ') and 'dhcp' not in line_str:
                 parts = line_str.split()
                 if len(parts) >= 3:
-                    block_ip = parts[2]
+                    block_ip = parts[2].split('/')[0]
                 if ip_address and ip_address in line_str:
                     has_fallback = True
             elif line_str.startswith('vrf forwarding '):
