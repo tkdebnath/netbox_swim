@@ -559,8 +559,9 @@ def generate_pipeline_plan(job_id):
         job_override = upgrade.extra_config.get('connection_priority_override') or upgrade.extra_config.get('connection_priority')
         if job_override: base_priority = job_override
         
-        step_override = step.extra_config.get('connection_priority_override')
-        if step_override: base_priority = step_override
+        step_override = step.extra_config.get('connection_priority_override') or step.extra_config.get('connection_library')
+        if step_override and step_override != 'auto':
+            base_priority = step_override
             
         priority_list = [t.strip().lower() for t in base_priority.split(',')]
         
@@ -722,8 +723,9 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
         job_override = upgrade.extra_config.get('connection_priority_override') or upgrade.extra_config.get('connection_priority')
         if job_override: base_priority = job_override
         
-        step_override = step.extra_config.get('connection_priority_override')
-        if step_override: base_priority = step_override
+        step_override = step.extra_config.get('connection_priority_override') or step.extra_config.get('connection_library')
+        if step_override and step_override != 'auto':
+            base_priority = step_override
             
         priority_list = [t.strip().lower() for t in base_priority.split(',')]
         
