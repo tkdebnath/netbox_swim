@@ -186,7 +186,7 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
 
         has_error = any(msg_tuple[0] in ['error', 'failed'] for msg_tuple in result) if isinstance(result, list) else True
 
-        # Always update the sync_record in DB so UI shows the outcome
+        # Always append log lines from the result
         error_lines = []
         if isinstance(result, list):
             for status_val, msg in result:
@@ -194,10 +194,18 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
                 prefix = 'ERROR' if status_val in ('error', 'failed') else status_val.upper()
                 error_lines.append(f"[{ts}] [{prefix}] {msg}")
 
-        sync_record.status = 'failed' if has_error else 'applied'
+        # Only override status on error — DO NOT overwrite the status that
+        # task.execute() / _process_cisco_ios_facts already set correctly
+        # ('pending', 'no_change', 'auto_applied'). Overwriting with 'applied'
+        # was the bug that showed auto_update=False records as "Applied".
+        if has_error:
+            sync_record.status = 'failed'
+        # else: leave whatever status the task set (pending / no_change / auto_applied)
+
         if error_lines:
             sync_record.log_messages = (sync_record.log_messages or []) + error_lines
         sync_record.save(update_fields=['status', 'log_messages'])
+
 
         if not has_error:
             device.custom_field_data['swim_last_sync_status'] = 'success'
