@@ -846,8 +846,14 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                             
                             # Standard executors return output_dirs=None to indicate an un-recoverable fault/not-implemented. 
                             if output_dirs is None:
-                                log_entry.log_output += f"[{lib.upper()}] aborted checks gracefully. Attempting fallback...\n"
-                                continue
+                                if "not yet implemented" in str(report_blob).lower():
+                                    log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
+                                    continue
+                                else:
+                                    log_entry.log_output += f"[{lib.upper()}] aborted checks gracefully. Proceeding with deterministic failure.\n"
+                                    step_success = False
+                                    log_entry.is_success = False
+                                    break
                                 
                             if action == 'precheck':
                                 precheck_output = report_blob
@@ -879,25 +885,33 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                             # Format output based on return type
                             if isinstance(report_blob, list):
                                 # Readiness returns list of (status, message) tuples
-                                formatted = "\n".join(f"[{s.upper()}] {m}" for s, m in report_blob)
+                                formatted = "\n".join(f"[{str(s).upper()}] {m}" for s, m in report_blob if len(report_blob) > 0 and isinstance(s, str))
                                 log_entry.log_output += f"{action.upper()} OUTPUT:\n{formatted}\n"
                                 
+                                # Check for stubs
+                                is_stub = any("not yet implemented" in str(m).lower() for s, m in report_blob)
+                                if is_stub:
+                                    log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
+                                    continue
+                                    
                                 # Check for failures in structured results
                                 failure_indicators = {'failed', 'fail', 'error'}
                                 has_failure = any(
-                                    s.lower() in failure_indicators 
-                                    for s, m in report_blob 
-                                    if isinstance(s, str)
+                                    str(s).lower() in failure_indicators 
+                                    for s, m in report_blob
                                 )
                                 if has_failure:
-                                    log_entry.log_output += f"[{lib.upper()}] generated structural failure state. Attempting fallback...\n"
-                                    continue
+                                    log_entry.log_output += f"[{lib.upper()}] generated structural failure state.\n"
+                                    step_success = False
+                                    log_entry.is_success = False
+                                    break
                                 else:
                                     step_success = True
                                     log_entry.is_success = True
                                     break
+                                    
                             elif isinstance(report_blob, tuple):
-                                # Distribution, Activation, Verification return (bool, str)
+                                # Verification returns (bool, str)
                                 is_success, message = report_blob
                                 log_entry.log_output += f"{action.upper()} OUTPUT:\n{message}\n"
                                 
