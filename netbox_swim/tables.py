@@ -78,11 +78,12 @@ class DeviceComplianceTable(NetBoxTable):
 
 class WorkflowTemplateTable(NetBoxTable):
     name = tables.Column(linkify=True)
+    is_active = tables.BooleanColumn()
 
     class Meta(NetBoxTable.Meta):
         model = WorkflowTemplate
-        fields = ('pk', 'id', 'name', 'status', 'description', 'device', 'target_image', 'tags')
-        default_columns = ('name', 'device', 'status', 'target_image')
+        fields = ('pk', 'id', 'name', 'description', 'is_active', 'tags')
+        default_columns = ('pk', 'name', 'description', 'is_active')
 
 
 class ValidationCheckTable(NetBoxTable):
