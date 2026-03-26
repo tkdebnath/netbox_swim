@@ -50,7 +50,7 @@ class GoldenImageSerializer(NetBoxModelSerializer):
     class Meta:
         model = GoldenImage
         fields = (
-            'id', 'display', 'device_type', 'hardware_group', 'deployment_mode',
+            'id', 'display', 'device_types', 'hardware_groups', 'deployment_mode',
             'image', 'description', 'tags', 'custom_fields', 'created', 'last_updated',
         )
 

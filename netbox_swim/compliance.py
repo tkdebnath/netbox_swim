@@ -105,11 +105,11 @@ def capture_compliance_snapshot():
 
     golden_by_dtype = {}
     golden_by_hwgroup = {}
-    for gi in swim_models.GoldenImage.objects.select_related('image'):
-        if gi.device_type_id:
-            golden_by_dtype[(gi.device_type_id, gi.deployment_mode)] = gi
-        if gi.hardware_group_id:
-            golden_by_hwgroup[(gi.hardware_group_id, gi.deployment_mode)] = gi
+    for gi in swim_models.GoldenImage.objects.prefetch_related('device_types', 'hardware_groups').select_related('image'):
+        for dt in gi.device_types.all():
+            golden_by_dtype[(dt.pk, gi.deployment_mode)] = gi
+        for hg in gi.hardware_groups.all():
+            golden_by_hwgroup[(hg.pk, gi.deployment_mode)] = gi
 
     counts = {'total': 0, 'compliant': 0, 'non_compliant': 0, 'ahead': 0, 'unknown': 0}
 

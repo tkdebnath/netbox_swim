@@ -52,14 +52,15 @@ class SoftwareImageTable(NetBoxTable):
 
 
 class GoldenImageTable(NetBoxTable):
-    device_type = tables.Column(linkify=True)
+    device_types = columns.ManyToManyColumn(linkify_item=True)
+    hardware_groups = columns.ManyToManyColumn(linkify_item=True)
     deployment_mode = ChoiceFieldColumn()
     image = tables.Column(linkify=True)
 
     class Meta(NetBoxTable.Meta):
         model = GoldenImage
-        fields = ('pk', 'id', 'device_type', 'hardware_group', 'deployment_mode', 'image', 'description', 'created', 'last_updated')
-        default_columns = ('device_type', 'hardware_group', 'deployment_mode', 'image', 'description')
+        fields = ('pk', 'id', 'device_types', 'hardware_groups', 'deployment_mode', 'image', 'description', 'created', 'last_updated')
+        default_columns = ('device_types', 'hardware_groups', 'deployment_mode', 'image', 'description')
 
 
 class DeviceComplianceTable(NetBoxTable):

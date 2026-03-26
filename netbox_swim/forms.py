@@ -98,13 +98,13 @@ class SoftwareImageForm(NetBoxModelForm):
 
 
 class GoldenImageForm(NetBoxModelForm):
-    device_type = DynamicModelChoiceField(queryset=DeviceType.objects.all(), required=False)
-    hardware_group = DynamicModelChoiceField(queryset=models.HardwareGroup.objects.all(), required=False)
+    device_types = DynamicModelMultipleChoiceField(queryset=DeviceType.objects.all(), required=False)
+    hardware_groups = DynamicModelMultipleChoiceField(queryset=models.HardwareGroup.objects.all(), required=False)
     image = DynamicModelChoiceField(queryset=models.SoftwareImage.objects.all())
 
     class Meta:
         model = models.GoldenImage
-        fields = ('device_type', 'hardware_group', 'deployment_mode', 'image', 'description', 'tags')
+        fields = ('device_types', 'hardware_groups', 'deployment_mode', 'image', 'description', 'tags')
 
 class DeviceComplianceForm(NetBoxModelForm):
     device = DynamicModelChoiceField(queryset=Device.objects.all())

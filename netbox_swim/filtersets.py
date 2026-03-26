@@ -44,7 +44,7 @@ class SoftwareImageFilterSet(NetBoxModelFilterSet):
 
 class GoldenImageFilterSet(NetBoxModelFilterSet):
     device_type_id = django_filters.ModelMultipleChoiceFilter(
-        field_name='device_type',
+        field_name='device_types',
         queryset=DeviceType.objects.all(),
         label='Device Type (ID)',
     )
@@ -54,7 +54,7 @@ class GoldenImageFilterSet(NetBoxModelFilterSet):
 
     class Meta:
         model = GoldenImage
-        fields = ('id', 'device_type', 'deployment_mode')
+        fields = ('id', 'deployment_mode')
 
 
 # ============================================================

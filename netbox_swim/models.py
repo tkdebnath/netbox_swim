@@ -173,21 +173,19 @@ class SoftwareImage(NetBoxModel):
 
 
 class GoldenImage(NetBoxModel):
-    device_type = models.ForeignKey('dcim.DeviceType', on_delete=models.CASCADE, related_name='golden_images', null=True, blank=True)
-    hardware_group = models.ForeignKey('HardwareGroup', on_delete=models.CASCADE, related_name='golden_images', null=True, blank=True)
+    device_types = models.ManyToManyField('dcim.DeviceType', related_name='golden_images', blank=True)
+    hardware_groups = models.ManyToManyField('HardwareGroup', related_name='golden_images', blank=True)
     deployment_mode = models.CharField(max_length=20, choices=DeploymentModeChoices.choices, default=DeploymentModeChoices.CAMPUS)
     image = models.ForeignKey(SoftwareImage, on_delete=models.CASCADE, related_name='golden_designations')
     description = models.TextField(blank=True)
 
     class Meta:
-        ordering = ['device_type', 'hardware_group']
-        constraints = [
-            models.UniqueConstraint(fields=['device_type', 'deployment_mode'], name='unique_golden_device_type', condition=models.Q(device_type__isnull=False)),
-            models.UniqueConstraint(fields=['hardware_group', 'deployment_mode'], name='unique_golden_hw_group', condition=models.Q(hardware_group__isnull=False)),
-        ]
+        ordering = ['deployment_mode']
 
     def __str__(self):
-        return f"Golden: {self.device_type or self.hardware_group} ({self.get_deployment_mode_display()})"
+        dt_names = ', '.join(str(dt) for dt in self.device_types.all()[:3]) or 'Any'
+        hg_names = ', '.join(str(hg) for hg in self.hardware_groups.all()[:3]) or 'Any'
+        return f"Golden: {dt_names} / {hg_names} ({self.get_deployment_mode_display()})"
 
     def get_absolute_url(self):
         return reverse('plugins:netbox_swim:goldenimage', args=[self.pk])
