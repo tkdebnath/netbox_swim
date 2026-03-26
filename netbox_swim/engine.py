@@ -184,6 +184,11 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
         logger.info(f"Starting sync execution for {device.name}")
         result = task.execute(device, auto_update=auto_update)
 
+        # Refresh from DB — _process_cisco_ios_facts() already saved the correct
+        # status (pending / no_change / auto_applied). If we don't reload, our
+        # stale in-memory copy still has status='syncing' and will overwrite it.
+        sync_record.refresh_from_db()
+
         has_error = any(msg_tuple[0] in ['error', 'failed'] for msg_tuple in result) if isinstance(result, list) else True
 
         # Always append log lines from the result
@@ -194,13 +199,9 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
                 prefix = 'ERROR' if status_val in ('error', 'failed') else status_val.upper()
                 error_lines.append(f"[{ts}] [{prefix}] {msg}")
 
-        # Only override status on error — DO NOT overwrite the status that
-        # task.execute() / _process_cisco_ios_facts already set correctly
-        # ('pending', 'no_change', 'auto_applied'). Overwriting with 'applied'
-        # was the bug that showed auto_update=False records as "Applied".
+        # Only override status on error — the task already set the correct status
         if has_error:
             sync_record.status = 'failed'
-        # else: leave whatever status the task set (pending / no_change / auto_applied)
 
         if error_lines:
             sync_record.log_messages = (sync_record.log_messages or []) + error_lines
