@@ -603,7 +603,8 @@ class UpgradeJobDownloadFragmentView(generic.ObjectView):
         from django.conf import settings
         from django.utils import timezone as tz
 
-        job = self.get_object()
+        from django.shortcuts import get_object_or_404
+        job = get_object_or_404(self.queryset, pk=pk)
         base_media = getattr(settings, 'MEDIA_ROOT', '/opt/netbox/netbox/media')
         target_dir = os.path.join(base_media, 'swim', 'checks', str(job.id), fragment)
 
@@ -683,7 +684,8 @@ class UpgradeJobDownloadLogsView(generic.ObjectView):
         from django.http import HttpResponse
         from django.utils import timezone as tz
 
-        job = self.get_object()
+        from django.shortcuts import get_object_or_404
+        job = get_object_or_404(self.queryset, pk=pk)
         logs = models.JobLog.objects.filter(job=job).order_by('timestamp')
 
         content = []
@@ -725,7 +727,8 @@ class UpgradeJobDownloadChecksView(generic.ObjectView):
         from django.conf import settings
         from django.utils import timezone as tz
 
-        job = self.get_object()
+        from django.shortcuts import get_object_or_404
+        job = get_object_or_404(self.queryset, pk=pk)
 
         # Check for existing archive in extra_config
         archive_meta = job.extra_config.get('checks_archive', {})

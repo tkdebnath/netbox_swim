@@ -121,11 +121,12 @@ class JobLogTable(NetBoxTable):
     job = tables.Column(linkify=True)
     action_type = tables.Column(linkify=True)
     is_success = columns.BooleanColumn()
+    actions = columns.ActionsColumn(actions=())
 
     class Meta(NetBoxTable.Meta):
         model = JobLog
-        fields = ('pk', 'id', 'job', 'action_type', 'step', 'is_success', 'log_output', 'timestamp')
-        default_columns = ('job', 'action_type', 'step', 'is_success', 'timestamp')
+        fields = ('pk', 'id', 'job', 'action_type', 'step', 'is_success', 'log_output', 'timestamp', 'actions')
+        default_columns = ('job', 'action_type', 'step', 'is_success', 'timestamp', 'actions')
 
 
 
