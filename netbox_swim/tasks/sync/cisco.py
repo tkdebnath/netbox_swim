@@ -452,20 +452,28 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
                 if response_prompt:
                     hostname = response_prompt.replace("#", "").replace(">", "").strip()
 
-                response_ver = conn.send_command("show version")
+                response_ver = conn.send_command(
+                    "show version", use_textfsm=False, strip_prompt=True, strip_command=True
+                )
                 parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
                 golden_schema = parser_ver.get_facts()
 
                 if hostname:
                     golden_schema['hostname'] = hostname
 
-                response_inv = conn.send_command("show inventory")
+                response_inv = conn.send_command(
+                    "show inventory", use_textfsm=False, strip_prompt=True, strip_command=True
+                )
                 parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
                 for k, v in parser_inv.get_facts().items():
                     if v: golden_schema[k] = v
 
-                response_run = conn.send_command("show running-config")
-                response_interface = conn.send_command("show interface")
+                response_run = conn.send_command(
+                    "show running-config", use_textfsm=False, strip_prompt=True, strip_command=True
+                )
+                response_interface = conn.send_command(
+                    "show interface", use_textfsm=False, strip_prompt=True, strip_command=True
+                )
 
                 fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
                 tacacs_dict = {
@@ -499,7 +507,10 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
         host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
         _, username, _, _, _ = self._get_credentials(device)
         try:
-            with self.connect(device, log_stdout=True, learn_hostname=True) as conn:
+            # Do NOT pass log_stdout here — base.py UniconTask.connect() already
+            # hardcodes log_stdout=False inside pyats_device.connect().
+            # Passing it again causes: "got multiple values for keyword argument 'log_stdout'"
+            with self.connect(device) as conn:
                 slug = device.platform.slug if device.platform else 'cisco_ios'
 
                 hostname = None
