@@ -152,14 +152,14 @@ class BulkSyncForm(django_forms.Form):
     )
     device = DynamicModelMultipleChoiceField(
         queryset=dcim_models.Device.objects.all(),
-        required=False,
+        required=True,
         query_params={
             'site_id': '$site',
             'role_id': '$device_role',
             'has_primary_ip': 'true'
         },
         label='Specific Device(s)',
-        help_text='If left blank, ALL devices in the selected sites/regions with a primary IP will be synced.'
+        help_text='REQUIRED: Search and select the explicit devices you want to sync, filtered logically by the Region/Site/Role dropdowns above.'
     )
     has_primary_ip = django_forms.BooleanField(
         required=False,
@@ -213,14 +213,14 @@ class BulkUpgradeForm(django_forms.Form):
     )
     device = DynamicModelMultipleChoiceField(
         queryset=dcim_models.Device.objects.all(),
-        required=False,
+        required=True,
         query_params={
             'site_id': '$site',
             'role_id': '$device_role',
             'has_primary_ip': 'true'
         },
         label='Specific Device(s)',
-        help_text='If left blank, ALL Non-Compliant matching devices will be scheduled for Upgrade.'
+        help_text='REQUIRED: Select explicit Non-Compliant devices for remediation. Region/Site dropdowns above will filter this pool.'
     )
     connection_library = django_forms.ChoiceField(
         choices=[
