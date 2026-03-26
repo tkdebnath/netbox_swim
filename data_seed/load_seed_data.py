@@ -70,6 +70,58 @@ def resolve_id(endpoint, field, value):
     return obj["id"] if obj else None
 
 
+def patch_m2m(endpoint, obj_id, field, ids):
+    """PATCH a many-to-many field on an existing object."""
+    if not ids:
+        return
+    url = f"{BASE_URL}{endpoint}{obj_id}/"
+    r = requests.patch(url, headers=HEADERS, json={field: ids})
+    if r.status_code in (200, 201):
+        print(f"  PATCH {field} -> {ids} on id={obj_id}")
+    else:
+        print(f"  FAIL  PATCH {field} on id={obj_id} — {r.status_code}: {r.text[:150]}")
+
+
+# --- Placeholder lookup tables ---
+# These map placeholder tokens to (endpoint, lookup_field, lookup_value)
+
+HG_SLUGS = {
+    "__HG_CAMPUS_CORE_C9300__": "campus-core-c9300",
+    "__HG_CAMPUS_ACCESS_C9200__": "campus-access-c9200",
+    "__HG_SDWAN_EDGE__": "sdwan-edge-fleet",
+    "__HG_DC_NEXUS__": "dc-nexus-spine-leaf",
+}
+
+DT_SLUGS = {
+    "__DT_C9300_48P__": "c9300-48p",
+    "__DT_C9300_24P__": "c9300-24p",
+    "__DT_C9200_48P__": "c9200-48p",
+    "__DT_N9K_FX3__": "n9k-fx3",
+}
+
+PLATFORM_SLUGS = {
+    "__PLATFORM_SLUG_IOSXE__": "cisco-ios-xe",
+    "__PLATFORM_SLUG_NXOS__": "cisco-nx-os",
+    "__PLATFORM_SLUG_IOS__": "cisco-ios",
+}
+
+
+def resolve_patch_ids(placeholders, slug_map, endpoint, field="slug"):
+    """Resolve a list of placeholder tokens to real IDs."""
+    ids = []
+    for token in (placeholders or []):
+        slug = slug_map.get(token)
+        if slug:
+            obj_id = resolve_id(endpoint, field, slug)
+            if obj_id:
+                ids.append(obj_id)
+            else:
+                print(f"  WARN  Could not resolve {token} -> {slug}")
+        else:
+            print(f"  WARN  Unknown placeholder: {token}")
+    return ids
+
+
 # ============================================================
 # STEP LOADERS
 # ============================================================
@@ -200,11 +252,24 @@ def load_11(data):
         "__TEMPLATE_ID_HOTFIX__": "Emergency Hotfix (No Checks)",
     }
     for hg in data.get("data", []):
+        # Pull out _patch fields before creating
+        patch_platforms = hg.pop("_patch_platforms", [])
+        patch_device_types = hg.pop("_patch_device_types", [])
+
         hg = {k: v for k, v in hg.items() if not k.startswith("_")}
         wt = hg.get("workflow_template")
         if isinstance(wt, str) and wt in TEMPLATE_NAMES:
             hg["workflow_template"] = resolve_id("/api/plugins/swim/workflow-templates/", "name", TEMPLATE_NAMES[wt])
-        create_if_missing("/api/plugins/swim/hardware-groups/", hg, "slug")
+        hg_id = create_if_missing("/api/plugins/swim/hardware-groups/", hg, "slug")
+
+        # PATCH M2M: platforms and device_types
+        if hg_id:
+            platform_ids = resolve_patch_ids(patch_platforms, PLATFORM_SLUGS, "/api/dcim/platforms/")
+            dt_ids = resolve_patch_ids(patch_device_types, DT_SLUGS, "/api/dcim/device-types/")
+            if platform_ids:
+                patch_m2m("/api/plugins/swim/hardware-groups/", hg_id, "platforms", platform_ids)
+            if dt_ids:
+                patch_m2m("/api/plugins/swim/hardware-groups/", hg_id, "device_types", dt_ids)
 
 
 def load_12(data):
@@ -222,6 +287,10 @@ def load_12(data):
         "__FILESERVER_ID_NY_SCP__":  "NY-SCP-SRV",
     }
     for img in data.get("data", []):
+        # Pull out _patch fields before creating
+        patch_hgs = img.pop("_patch_hardware_groups", [])
+        patch_dts = img.pop("_patch_device_types", [])
+
         img = {k: v for k, v in img.items() if not k.startswith("_")}
         p = img.get("platform")
         if isinstance(p, str) and p in PLATFORMS:
@@ -229,7 +298,16 @@ def load_12(data):
         fs = img.get("file_server")
         if isinstance(fs, str) and fs in FILE_SERVERS:
             img["file_server"] = resolve_id("/api/plugins/swim/file-servers/", "name", FILE_SERVERS[fs])
-        create_if_missing("/api/plugins/swim/software-images/", img, "image_name")
+        img_id = create_if_missing("/api/plugins/swim/software-images/", img, "image_name")
+
+        # PATCH M2M: hardware_groups and device_types
+        if img_id:
+            hg_ids = resolve_patch_ids(patch_hgs, HG_SLUGS, "/api/plugins/swim/hardware-groups/")
+            dt_ids = resolve_patch_ids(patch_dts, DT_SLUGS, "/api/dcim/device-types/")
+            if hg_ids:
+                patch_m2m("/api/plugins/swim/software-images/", img_id, "hardware_groups", hg_ids)
+            if dt_ids:
+                patch_m2m("/api/plugins/swim/software-images/", img_id, "device_types", dt_ids)
 
 
 def load_13(data):
@@ -241,6 +319,10 @@ def load_13(data):
         "__IMAGE_ID_NXOS__":         "NX-OS-10.3(2)F",
     }
     for gi in data.get("data", []):
+        # Pull out _patch fields before creating
+        patch_hgs = gi.pop("_patch_hardware_groups", [])
+        patch_dts = gi.pop("_patch_device_types", [])
+
         gi = {k: v for k, v in gi.items() if not k.startswith("_")}
         img = gi.get("image")
         if isinstance(img, str) and img in IMAGES:
@@ -251,11 +333,28 @@ def load_13(data):
 
         r = requests.post(f"{BASE_URL}/api/plugins/swim/golden-images/", headers=HEADERS, json=gi)
         if r.status_code in (200, 201):
-            print(f"  OK    Golden Image created (mode={gi.get('deployment_mode')})")
+            gi_id = r.json()["id"]
+            print(f"  OK    Golden Image created (mode={gi.get('deployment_mode')}, id={gi_id})")
         elif "already exists" in r.text.lower() or "unique" in r.text.lower():
             print(f"  SKIP  Golden Image already exists (mode={gi.get('deployment_mode')})")
+            # Find existing for PATCH
+            gi_id = None
+            for existing in get_all("/api/plugins/swim/golden-images/"):
+                if existing.get("image", {}).get("id") == gi["image"]:
+                    gi_id = existing["id"]
+                    break
         else:
             print(f"  FAIL  {r.status_code}: {r.text[:150]}")
+            gi_id = None
+
+        # PATCH M2M: hardware_groups and device_types
+        if gi_id:
+            hg_ids = resolve_patch_ids(patch_hgs, HG_SLUGS, "/api/plugins/swim/hardware-groups/")
+            dt_ids = resolve_patch_ids(patch_dts, DT_SLUGS, "/api/dcim/device-types/")
+            if hg_ids:
+                patch_m2m("/api/plugins/swim/golden-images/", gi_id, "hardware_groups", hg_ids)
+            if dt_ids:
+                patch_m2m("/api/plugins/swim/golden-images/", gi_id, "device_types", dt_ids)
 
 
 # ============================================================

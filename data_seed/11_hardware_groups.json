@@ -1,6 +1,6 @@
 {
   "_endpoint": "/api/plugins/swim/hardware-groups/",
-  "_description": "Step 11: Create Hardware Groups for fleet segmentation. Requires: platforms, device-types from steps 01-02, workflow-templates from step 09.",
+  "_description": "Step 11: Hardware Groups. Requires: platforms and device-types (steps 01-02), workflow-templates (step 09).",
   "data": [
     {
       "name": "Campus Core C9300",
@@ -12,8 +12,8 @@
       "min_version": "",
       "max_version": "",
       "workflow_template": "__TEMPLATE_ID_CAMPUS__",
-      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
-      "_note_device_types": "Add device type IDs for c9300-48p, c9300-24p after creation"
+      "_patch_platforms": ["__PLATFORM_SLUG_IOSXE__"],
+      "_patch_device_types": ["__DT_C9300_48P__", "__DT_C9300_24P__"]
     },
     {
       "name": "Campus Access C9200",
@@ -25,8 +25,8 @@
       "min_version": "",
       "max_version": "",
       "workflow_template": "__TEMPLATE_ID_CAMPUS__",
-      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
-      "_note_device_types": "Add device type IDs for c9200-48p after creation"
+      "_patch_platforms": ["__PLATFORM_SLUG_IOSXE__"],
+      "_patch_device_types": ["__DT_C9200_48P__"]
     },
     {
       "name": "SD-WAN Edge Fleet",
@@ -38,8 +38,8 @@
       "min_version": "",
       "max_version": "",
       "workflow_template": "__TEMPLATE_ID_SDWAN__",
-      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
-      "_note_device_types": "Add device type IDs for c9300-48p after creation"
+      "_patch_platforms": ["__PLATFORM_SLUG_IOSXE__"],
+      "_patch_device_types": ["__DT_C9300_48P__"]
     },
     {
       "name": "DC Nexus Spine-Leaf",
@@ -51,9 +51,9 @@
       "min_version": "",
       "max_version": "",
       "workflow_template": "__TEMPLATE_ID_DC__",
-      "_note_platforms": "Add platform IDs for cisco-nx-os after creation",
-      "_note_device_types": "Add device type IDs for n9k-fx3 after creation"
+      "_patch_platforms": ["__PLATFORM_SLUG_NXOS__"],
+      "_patch_device_types": ["__DT_N9K_FX3__"]
     }
   ],
-  "_note": "Replace __TEMPLATE_ID_*__ with actual WorkflowTemplate IDs. After creating groups, use PATCH to add M2M relationships (platforms, device_types)."
+  "_note": "Replace __TEMPLATE_ID_*__ with WorkflowTemplate IDs from step 09. The _patch fields are resolved by the loader — it PATCHes M2M relations after creation."
 }

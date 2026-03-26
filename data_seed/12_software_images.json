@@ -1,6 +1,6 @@
 {
   "_endpoint": "/api/plugins/swim/software-images/",
-  "_description": "Step 12: Create Software Images. Requires: platforms from step 01, file-servers from step 06, hardware-groups from step 11.",
+  "_description": "Step 12: Software Images. Requires: platforms (step 01), file-servers (step 06), hardware-groups (step 11).",
   "data": [
     {
       "image_name": "Cat9k-IOS-XE-17.09.05",
@@ -19,7 +19,9 @@
       "release_notes_url": "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-9/release_notes.html",
       "min_ram_mb": 8192,
       "min_flash_mb": 4096,
-      "description": "Cisco IOS-XE 17.09.05 for Catalyst 9300 campus deployment"
+      "description": "Cisco IOS-XE 17.09.05 for Catalyst 9300 campus deployment",
+      "_patch_hardware_groups": ["__HG_CAMPUS_CORE_C9300__"],
+      "_patch_device_types": ["__DT_C9300_48P__", "__DT_C9300_24P__"]
     },
     {
       "image_name": "Cat9k-SDWAN-17.09.05",
@@ -38,7 +40,9 @@
       "release_notes_url": "https://www.cisco.com/c/en/us/td/docs/routers/sdwan/release/notes/17-09.html",
       "min_ram_mb": 8192,
       "min_flash_mb": 8192,
-      "description": "Cisco SD-WAN IOS-XE 17.09.05 for edge routers"
+      "description": "Cisco SD-WAN IOS-XE 17.09.05 for edge routers",
+      "_patch_hardware_groups": ["__HG_SDWAN_EDGE__"],
+      "_patch_device_types": ["__DT_C9300_48P__"]
     },
     {
       "image_name": "Cat9200-IOS-XE-17.09.05",
@@ -57,7 +61,9 @@
       "release_notes_url": "",
       "min_ram_mb": 4096,
       "min_flash_mb": 2048,
-      "description": "Cisco IOS-XE 17.09.05 for Catalyst 9200 access switches"
+      "description": "Cisco IOS-XE 17.09.05 for Catalyst 9200 access switches",
+      "_patch_hardware_groups": ["__HG_CAMPUS_ACCESS_C9200__"],
+      "_patch_device_types": ["__DT_C9200_48P__"]
     },
     {
       "image_name": "NX-OS-10.3(2)F",
@@ -76,8 +82,10 @@
       "release_notes_url": "https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/103x/release-notes.html",
       "min_ram_mb": 16384,
       "min_flash_mb": 8192,
-      "description": "Cisco NX-OS 10.3(2)F for Nexus 9000 data center switches"
+      "description": "Cisco NX-OS 10.3(2)F for Nexus 9000 data center switches",
+      "_patch_hardware_groups": ["__HG_DC_NEXUS__"],
+      "_patch_device_types": ["__DT_N9K_FX3__"]
     }
   ],
-  "_note": "Replace __PLATFORM_ID_*__ and __FILESERVER_ID_*__ with actual IDs from steps 01 and 06. After creation, PATCH to add hardware_groups and device_types M2M."
+  "_note": "Replace __PLATFORM_ID_*__ and __FILESERVER_ID_*__ with actual IDs. The _patch_hardware_groups and _patch_device_types fields are resolved by the loader script — it PATCHes the M2M relationships after image creation."
 }
