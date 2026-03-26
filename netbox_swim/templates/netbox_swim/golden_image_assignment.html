@@ -2,12 +2,15 @@
 {% load helpers %}
 {% load render_table from django_tables2 %}
 
-{% block title %}Golden Image Assignment{% endblock %}
+{% block title %}Device Type Assignment Matrix{% endblock %}
 
 {% block tabs %}
 <ul class="nav nav-tabs px-3">
     <li class="nav-item">
         <a class="nav-link" href="{% url 'plugins:netbox_swim:goldenimage_list' %}">Golden Images</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{% url 'plugins:netbox_swim:hardwaregroup_list' %}">Hardware Groups</a>
     </li>
     <li class="nav-item">
         <a class="nav-link active" href="{% url 'plugins:netbox_swim:goldenimage_assignment' %}">Assignment Matrix</a>
@@ -30,18 +33,16 @@
     <div class="col-md-4">
         <div class="card h-100 border-success">
             <div class="card-body text-center">
-                <h6 class="text-muted mb-1">Assigned</h6>
+                <h6 class="text-muted mb-1">Golden Image Assigned</h6>
                 <h2 class="mb-0 text-success">{{ assigned_count }}</h2>
-                <small class="text-muted">Have a golden image</small>
             </div>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card h-100 border-warning">
             <div class="card-body text-center">
-                <h6 class="text-muted mb-1">Unassigned</h6>
+                <h6 class="text-muted mb-1">No Golden Image</h6>
                 <h2 class="mb-0 text-warning">{{ unassigned_count }}</h2>
-                <small class="text-muted">Need golden image assignment</small>
             </div>
         </div>
     </div>
@@ -54,16 +55,35 @@
     <div class="card mb-3">
         <div class="card-body py-2 d-flex align-items-center gap-3 flex-wrap">
             <strong>With selected:</strong>
+
+            {# Action selector #}
             <select name="action" class="form-select form-select-sm" style="width: auto;" id="action-select">
-                <option value="assign">Assign Golden Image</option>
-                <option value="unassign">Remove Assignment</option>
+                <optgroup label="Golden Image">
+                    <option value="assign_gi">Assign Golden Image</option>
+                    <option value="unassign_gi">Remove Golden Image</option>
+                </optgroup>
+                <optgroup label="Hardware Group">
+                    <option value="assign_hwgroup">Add to Hardware Group</option>
+                    <option value="unassign_hwgroup">Remove from All Groups</option>
+                </optgroup>
             </select>
+
+            {# Golden image dropdown (shown for assign_gi) #}
             <select name="golden_image" class="form-select form-select-sm" style="width: auto; min-width: 300px;" id="golden-image-select">
                 <option value="">— Select Golden Image —</option>
                 {% for gi in golden_images %}
                 <option value="{{ gi.pk }}">{{ gi.image }} ({{ gi.get_deployment_mode_display }})</option>
                 {% endfor %}
             </select>
+
+            {# Hardware group dropdown (shown for assign_hwgroup) #}
+            <select name="hardware_group" class="form-select form-select-sm" style="width: auto; min-width: 250px; display: none;" id="hwgroup-select">
+                <option value="">— Select Hardware Group —</option>
+                {% for hg in hardware_groups %}
+                <option value="{{ hg.pk }}">{{ hg.name }}</option>
+                {% endfor %}
+            </select>
+
             <button type="submit" class="btn btn-sm btn-primary">
                 <i class="mdi mdi-check-circle"></i> Apply
             </button>
@@ -88,12 +108,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Show/hide golden image dropdown based on action
+    // Show/hide the correct dropdown based on action
     const actionSelect = document.getElementById('action-select');
     const giSelect = document.getElementById('golden-image-select');
-    actionSelect.addEventListener('change', function() {
-        giSelect.style.display = this.value === 'unassign' ? 'none' : '';
-    });
+    const hwSelect = document.getElementById('hwgroup-select');
+
+    function toggleDropdowns() {
+        const action = actionSelect.value;
+        giSelect.style.display = (action === 'assign_gi') ? '' : 'none';
+        hwSelect.style.display = (action === 'assign_hwgroup') ? '' : 'none';
+    }
+
+    actionSelect.addEventListener('change', toggleDropdowns);
+    toggleDropdowns(); // Initial state
 });
 </script>
 

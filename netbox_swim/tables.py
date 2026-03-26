@@ -267,25 +267,38 @@ class ComplianceDashboardTable(tables.Table):
 class GoldenImageAssignmentTable(NetBoxTable):
     """
     Uses the built-in DeviceType model directly.
-    Golden image info is injected via lookup dicts passed to __init__.
+    Golden image and hardware group info injected via lookup dicts passed to __init__.
     """
     pk = tables.CheckBoxColumn()
     manufacturer = tables.Column(accessor='manufacturer', linkify=True)
     model = tables.Column(linkify=True, verbose_name='Device Type')
+    hardware_group = tables.Column(empty_values=(), verbose_name='Hardware Group', orderable=False)
     golden_image = tables.Column(empty_values=(), verbose_name='Golden Image', orderable=False)
     golden_version = tables.Column(empty_values=(), verbose_name='Golden Version', orderable=False)
 
     class Meta(NetBoxTable.Meta):
         from dcim.models import DeviceType as DT
         model = DT
-        fields = ('pk', 'manufacturer', 'model', 'golden_image', 'golden_version')
-        default_columns = ('pk', 'manufacturer', 'model', 'golden_image', 'golden_version')
+        fields = ('pk', 'manufacturer', 'model', 'hardware_group', 'golden_image', 'golden_version')
+        default_columns = ('pk', 'manufacturer', 'model', 'hardware_group', 'golden_image', 'golden_version')
 
-    def __init__(self, *args, golden_map=None, golden_map_urls=None, golden_versions=None, **kwargs):
+    def __init__(self, *args, golden_map=None, golden_map_urls=None, golden_versions=None, hw_group_map=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.golden_map = golden_map or {}
         self.golden_map_urls = golden_map_urls or {}
         self.golden_versions = golden_versions or {}
+        self.hw_group_map = hw_group_map or {}  # dt_pk → list of (name, url) tuples
+
+    def render_hardware_group(self, record):
+        from django.utils.html import format_html, format_html_join
+        groups = self.hw_group_map.get(record.pk, [])
+        if groups:
+            return format_html_join(
+                ', ',
+                '<a href="{}">{}</a>',
+                ((url, name) for name, url in groups)
+            )
+        return format_html('<span class="text-muted">—</span>')
 
     def render_golden_image(self, record):
         from django.utils.html import format_html

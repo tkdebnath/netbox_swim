@@ -1247,6 +1247,12 @@ class GoldenImageAssignmentView(PermissionRequiredMixin, View):
                 golden_map_urls[dt.pk] = gi.get_absolute_url()
                 golden_versions[dt.pk] = gi.image.version
 
+        # Build hardware group lookup: device_type_pk → [(name, url), ...]
+        hw_group_map = {}  # dt_pk → list of (name, url)
+        for hg in models.HardwareGroup.objects.prefetch_related('device_types'):
+            for dt in hg.device_types.all():
+                hw_group_map.setdefault(dt.pk, []).append((hg.name, hg.get_absolute_url()))
+
         # Use DeviceType queryset directly
         device_types = DeviceType.objects.select_related('manufacturer').order_by('manufacturer__name', 'model')
 
@@ -1255,11 +1261,13 @@ class GoldenImageAssignmentView(PermissionRequiredMixin, View):
             golden_map=golden_map,
             golden_map_urls=golden_map_urls,
             golden_versions=golden_versions,
+            hw_group_map=hw_group_map,
         )
         RequestConfig(request, paginate={'per_page': 50}).configure(table)
 
-        # Golden images for the bulk-assign dropdown
+        # Dropdowns for the bulk-assign bar
         golden_images = models.GoldenImage.objects.select_related('image').all()
+        hardware_groups = models.HardwareGroup.objects.order_by('name')
 
         total = device_types.count()
         assigned = len(golden_map)
@@ -1267,6 +1275,7 @@ class GoldenImageAssignmentView(PermissionRequiredMixin, View):
         return render(request, 'netbox_swim/golden_image_assignment.html', {
             'table': table,
             'golden_images': golden_images,
+            'hardware_groups': hardware_groups,
             'total_device_types': total,
             'assigned_count': assigned,
             'unassigned_count': total - assigned,
@@ -1276,35 +1285,54 @@ class GoldenImageAssignmentView(PermissionRequiredMixin, View):
         from dcim.models import DeviceType
 
         selected_pks = request.POST.getlist('pk')
-        golden_image_pk = request.POST.get('golden_image')
-        action = request.POST.get('action', 'assign')
+        action = request.POST.get('action', 'assign_gi')
 
         if not selected_pks:
             messages.warning(request, "No device types selected.")
             return redirect('plugins:netbox_swim:goldenimage_assignment')
 
         device_types = DeviceType.objects.filter(pk__in=selected_pks)
+        count = len(selected_pks)
 
-        if action == 'unassign':
-            # Remove selected device types from all golden images
-            for gi in models.GoldenImage.objects.prefetch_related('device_types'):
-                gi.device_types.remove(*device_types)
-            messages.success(request, f"Removed golden image assignment from {len(selected_pks)} device type(s).")
-        elif golden_image_pk:
+        # --- Golden Image actions ---
+        if action == 'assign_gi':
+            golden_image_pk = request.POST.get('golden_image')
+            if not golden_image_pk:
+                messages.warning(request, "Please select a golden image to assign.")
+                return redirect('plugins:netbox_swim:goldenimage_assignment')
             try:
                 gi = models.GoldenImage.objects.get(pk=golden_image_pk)
             except models.GoldenImage.DoesNotExist:
                 messages.error(request, "Selected golden image not found.")
                 return redirect('plugins:netbox_swim:goldenimage_assignment')
-
-            # Remove these device types from any other golden images first
+            # Remove from other golden images first
             for other_gi in models.GoldenImage.objects.exclude(pk=gi.pk).prefetch_related('device_types'):
                 other_gi.device_types.remove(*device_types)
-
-            # Add to the selected golden image
             gi.device_types.add(*device_types)
-            messages.success(request, f"Assigned {len(selected_pks)} device type(s) to golden image: {gi}")
-        else:
-            messages.warning(request, "Please select a golden image to assign.")
+            messages.success(request, f"Assigned {count} device type(s) to golden image: {gi}")
+
+        elif action == 'unassign_gi':
+            for gi in models.GoldenImage.objects.prefetch_related('device_types'):
+                gi.device_types.remove(*device_types)
+            messages.success(request, f"Removed golden image from {count} device type(s).")
+
+        # --- Hardware Group actions ---
+        elif action == 'assign_hwgroup':
+            hw_group_pk = request.POST.get('hardware_group')
+            if not hw_group_pk:
+                messages.warning(request, "Please select a hardware group to assign.")
+                return redirect('plugins:netbox_swim:goldenimage_assignment')
+            try:
+                hg = models.HardwareGroup.objects.get(pk=hw_group_pk)
+            except models.HardwareGroup.DoesNotExist:
+                messages.error(request, "Selected hardware group not found.")
+                return redirect('plugins:netbox_swim:goldenimage_assignment')
+            hg.device_types.add(*device_types)
+            messages.success(request, f"Added {count} device type(s) to hardware group: {hg.name}")
+
+        elif action == 'unassign_hwgroup':
+            for hg in models.HardwareGroup.objects.prefetch_related('device_types'):
+                hg.device_types.remove(*device_types)
+            messages.success(request, f"Removed {count} device type(s) from all hardware groups.")
 
         return redirect('plugins:netbox_swim:goldenimage_assignment')
