@@ -149,7 +149,7 @@ class BulkUpgradeFormView(LoginRequiredMixin, PermissionRequiredMixin, View):
             from .engine import execute_bulk_remediation
             
             device_ids = [d.pk for d in devices]
-            connection_library = form.cleaned_data.get('connection_library', 'scrapli')
+            connection_library = form.cleaned_data.get('connection_library', 'auto')
             execution_mode = form.cleaned_data.get('execution_mode', 'execute')
             scheduled_time = form.cleaned_data.get('scheduled_time')
             
@@ -1064,7 +1064,7 @@ class ComplianceDashboardView(PermissionRequiredMixin, View):
             return redirect('plugins:netbox_swim:compliance_dashboard')
 
         action = request.POST.get('action', 'upgrade')
-        connection_library = request.POST.get('connection_library', 'scrapli')
+        connection_library = request.POST.get('connection_library', 'auto')
         execution_mode = request.POST.get('execution_mode', 'execute')
 
         device_ids = [int(pk) for pk in selected_pks]

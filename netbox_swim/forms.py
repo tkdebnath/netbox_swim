@@ -224,12 +224,13 @@ class BulkUpgradeForm(django_forms.Form):
     )
     connection_library = django_forms.ChoiceField(
         choices=[
+            ('auto', 'Auto (No Override, inherit from Target Group)'),
             ('scrapli', 'Scrapli (Default & Fastest)'),
             ('netmiko', 'Netmiko (Broadest Support)'),
             ('unicon', 'pyATS Unicon')
         ],
         required=False,
-        initial='scrapli',
+        initial='auto',
         label="Execution Driver Override"
     )
     execution_mode = django_forms.ChoiceField(
