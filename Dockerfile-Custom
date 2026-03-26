@@ -10,15 +10,21 @@ RUN apt-get update && \
 RUN mkdir -p /opt/netbox/netbox_swim && \
     chown -R netbox:root /opt/netbox/netbox_swim
 
-# 3. Use the cache buster to force the plugin reinstall
+# 3. Create a cached dependency layer
+# By copying ONLY setup.py first, we cache the heavy installation
+# of scrapli, netmiko, pyats, etc., and aren't subject to the cache-buster.
+COPY setup.py /opt/netbox/netbox_swim/setup.py
+RUN /usr/local/bin/uv pip install /opt/netbox/netbox_swim
+
+# 4. Use the cache buster to force the plugin re-copy and re-install
 ARG CACHEBUST=1
 
-# 4. Copy the code while still as root
+# 5. Copy the code while still as root
 COPY . /opt/netbox/netbox_swim
 
-# 5. INSTALL AS ROOT 
-# This allows 'uv' or 'pip' to upgrade existing protected packages
-RUN /usr/local/bin/uv pip install --upgrade --no-cache-dir /opt/netbox/netbox_swim
+# 6. INSTALL PLUGIN CODE AS ROOT 
+# We use --no-deps so it avoids resolving or fetching remote packages again!
+RUN /usr/local/bin/uv pip install --no-deps --upgrade --no-cache-dir /opt/netbox/netbox_swim
 
 # 6. FIX PERMISSIONS
 # Ensure everything in the venv and plugin folder is owned by netbox again
