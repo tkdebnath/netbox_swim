@@ -1078,6 +1078,26 @@ def _generate_checks_archive(job):
     archive_filename = f"{safe_name}_checks_{date_str}"
     
     archive_base = os.path.join(base_media, 'swim', 'checks', archive_filename)
+
+    # Write job execution log into the archive folder
+    try:
+        from .models import JobLog as JL
+        log_entries = JL.objects.filter(job=job).order_by('created')
+        if log_entries.exists():
+            log_path = os.path.join(job_dir, 'job_log.txt')
+            with open(log_path, 'w') as f:
+                f.write(f"=== Upgrade Job #{job.id} — {device_name} ===\n")
+                f.write(f"Status: {job.status}\n")
+                f.write(f"Start:  {job.start_time}\n")
+                f.write(f"End:    {job.end_time}\n")
+                f.write(f"{'=' * 60}\n\n")
+                for entry in log_entries:
+                    status = "PASS" if entry.is_success else "FAIL"
+                    f.write(f"--- [{status}] {entry.action_type} ({entry.created}) ---\n")
+                    f.write(f"{entry.log_output}\n\n")
+    except Exception as e:
+        logger.warning(f"Could not write job_log.txt: {e}")
+
     shutil.make_archive(archive_base, 'zip', job_dir)
     
     media_url = getattr(settings, 'MEDIA_URL', '/media/')
