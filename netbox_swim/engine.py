@@ -53,15 +53,15 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
 
     # User Request: Must have an explicit IPv4/IPv6 assigned.
     if not device.primary_ip:
-        msg = f"Device {device.name} has no Primary IP — sync aborted."
+        msg = f"Device {device.name} has no Primary IP — sync aborted. Assign a Primary IP in NetBox first."
         logger.error(msg)
         DeviceSyncRecord.objects.create(
             device=device,
             sync_job=SyncJob.objects.filter(id=sync_job_id).first() if sync_job_id else None,
-            status='failed',
-            log_messages=[msg]
+            status='aborted',
+            log_messages=[f"[ABORTED] {msg}"]
         )
-        return [("error", msg)]
+        return [("aborted", msg)]
 
     task = None
 
@@ -80,18 +80,18 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
 
     if task is None:
         msg = (
-            f"No sync strategy for platform slug='{platform_slug}'. "
+            f"No sync task matched for platform slug='{platform_slug}' / name='{platform_name}'. "
             f"Supported keywords: {CISCO_KEYWORDS}. "
-            f"Check the Platform slug on this device in NetBox."
+            f"Fix: Go to NetBox → Platform → edit this platform's slug so it contains one of the keywords above."
         )
         logger.error(f"[{device.name}] {msg}")
         DeviceSyncRecord.objects.create(
             device=device,
             sync_job=SyncJob.objects.filter(id=sync_job_id).first() if sync_job_id else None,
-            status='failed',
-            log_messages=[msg]
+            status='aborted',
+            log_messages=[f"[ABORTED] {msg}"]
         )
-        return [("error", msg)]
+        return [("aborted", msg)]
         
     # 2. Execute the Sync Task
     try:
@@ -201,6 +201,9 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
     )
 
     results = {}
+    aborted_count = 0
+    failed_count = 0
+
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         future_to_device = {
             executor.submit(_sync_device_logic, dev_id, auto_update, connection_library, sync_job.id): dev_id
@@ -215,20 +218,40 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
                 # Surface per-device result into SyncJob summary so UI always shows outcomes
                 if isinstance(result, list):
                     for status_val, msg in result:
-                        prefix = 'ERROR' if status_val in ('error', 'failed') else 'OK'
-                        sync_job.summary_logs.append(f"[Device {dev_id}] [{prefix}] {msg}")
-                        if status_val in ('error', 'failed'):
-                            sync_job.failed_device_count += 1
-                            break  # one error entry is enough to count the device as failed
+                        if status_val == 'aborted':
+                            sync_job.summary_logs.append(f"[Device {dev_id}] [ABORTED] {msg}")
+                            aborted_count += 1
+                            break
+                        elif status_val in ('error', 'failed'):
+                            sync_job.summary_logs.append(f"[Device {dev_id}] [FAILED] {msg}")
+                            failed_count += 1
+                            break
+                        else:
+                            sync_job.summary_logs.append(f"[Device {dev_id}] [OK] Sync completed successfully.")
             except Exception as e:
                 logger.error(f"Bulk sync thread exception for device {dev_id}: {str(e)}", exc_info=True)
-                sync_job.summary_logs.append(f"[Device {dev_id}] [ERROR] Unhandled exception: {type(e).__name__}: {e}")
+                sync_job.summary_logs.append(f"[Device {dev_id}] [FAILED] Unhandled exception: {type(e).__name__}: {e}")
                 results[dev_id] = [("error", str(e))]
-                sync_job.failed_device_count += 1
+                failed_count += 1
 
     sync_job.end_time = timezone.now()
-    sync_job.status = 'completed' if sync_job.failed_device_count == 0 else 'failed'
-    sync_job.summary_logs.append(f"Completed with {sync_job.failed_device_count} failures.")
+    sync_job.failed_device_count = aborted_count + failed_count
+
+    if failed_count == 0 and aborted_count == 0:
+        sync_job.status = 'completed'
+        sync_job.summary_logs.append(f"All {len(device_ids)} device(s) synced successfully.")
+    elif failed_count == 0 and aborted_count > 0:
+        sync_job.status = 'aborted'
+        sync_job.summary_logs.append(
+            f"Aborted: {aborted_count} device(s) were skipped before connecting. "
+            f"Check platform slugs and primary IP assignments."
+        )
+    else:
+        sync_job.status = 'failed'
+        sync_job.summary_logs.append(
+            f"Completed with {failed_count} failure(s) and {aborted_count} abort(s)."
+        )
+
     sync_job.save()
     return results
 
