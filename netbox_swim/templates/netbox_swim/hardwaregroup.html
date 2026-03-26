@@ -57,11 +57,14 @@
         <div class="card">
             <h5 class="card-header">Target Golden Images</h5>
             <div class="card-body">
-                <table class="table table-hover attr-table">
-                    <tr>
-                        <th>Deployment Mode</th>
-                        <th>Target Firmware Image</th>
-                    </tr>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Deployment Mode</th>
+                            <th>Target Firmware Image</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     {% for golden in object.golden_images.all %}
                         <tr>
                             <td>{{ golden.get_deployment_mode_display }}</td>
@@ -72,6 +75,7 @@
                             <td colspan="2" class="text-muted">No Golden Images assigned to this Hardware Group.</td>
                         </tr>
                     {% endfor %}
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -79,11 +83,14 @@
         <div class="card">
             <h5 class="card-header">Compatible Software Images</h5>
             <div class="card-body">
-                <table class="table table-hover attr-table">
-                    <tr>
-                        <th>Version</th>
-                        <th>Target Firmware Image</th>
-                    </tr>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Version</th>
+                            <th>Firmware Image</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     {% for image in object.software_images.all %}
                         <tr>
                             <td>{{ image.version }}</td>
@@ -94,6 +101,7 @@
                             <td colspan="2" class="text-muted">No compatible Standard Images assigned directly to this Hardware Group.</td>
                         </tr>
                     {% endfor %}
+                    </tbody>
                 </table>
             </div>
         </div>
