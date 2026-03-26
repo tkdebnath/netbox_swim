@@ -110,8 +110,45 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
         )
         return [("aborted", msg)]
 
-        
-    # 2. Execute the Sync Task
+
+    # 3. Validate credentials before attempting any connection
+    import os as _os
+    config_context = device.get_config_context()
+    cred_profile = config_context.get('swim', {}).get('credential_profile')
+    if cred_profile:
+        _cred_username = _os.environ.get(f"{cred_profile.upper()}_USERNAME", "")
+        _cred_password = _os.environ.get(f"{cred_profile.upper()}_PASSWORD", "")
+        _env_hint = f"{cred_profile.upper()}_USERNAME / {cred_profile.upper()}_PASSWORD"
+    else:
+        _cred_username = _os.environ.get('SWIM_USERNAME', '')
+        _cred_password = _os.environ.get('SWIM_PASSWORD', '')
+        _env_hint = "SWIM_USERNAME / SWIM_PASSWORD"
+
+    _missing = []
+    if not _cred_username:
+        _missing.append(f"{_env_hint.split('/')[0].strip()} (username)")
+    if not _cred_password:
+        _missing.append(f"{_env_hint.split('/')[-1].strip()} (password)")
+
+    if _missing:
+        msg = (
+            f"[engine.py] Connection NOT initiated — credentials missing for device '{device.name}'. "
+            f"Missing env vars: {', '.join(_missing)}. "
+            f"Fix: Set these environment variables in your Docker Compose file under 'environment:' "
+            f"or in the container's .env file, then restart the worker."
+        )
+        logger.error(f"[{device.name}] {msg}")
+        DeviceSyncRecord.objects.create(
+            device=device,
+            sync_job=SyncJob.objects.filter(id=sync_job_id).first() if sync_job_id else None,
+            status='aborted',
+            log_messages=[f"[ABORTED] {msg}"]
+        )
+        if finalize_job and sync_job_id:
+            _finalize_sync_job(sync_job_id, has_error=False, result=[("aborted", msg)])
+        return [("aborted", msg)]
+
+    # 4. Execute the Sync Task
     try:
         import uuid
         
