@@ -483,9 +483,12 @@ class UpgradeJobView(generic.ObjectView):
         if candidates and target_image:
             fs = candidates[0]
             context['file_server'] = fs
-            # Clean up double slashes gracefully just like the executor
-            base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
-            context['download_url'] = f"{fs.protocol}://{fs.ip_address}/{base_path}{target_image.image_file_name}"
+            # Build clean URL — strip slashes from parts, then join with /
+            parts = [fs.ip_address]
+            if fs.base_path and fs.base_path.strip('/'):
+                parts.append(fs.base_path.strip('/'))
+            parts.append(target_image.image_file_name.strip('/'))
+            context['download_url'] = f"{fs.protocol}://{'/'.join(parts)}"
 
         # ----- 6. Golden Image -----
         golden = None
