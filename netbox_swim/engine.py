@@ -914,7 +914,7 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                                 # Format output based on return type
                                 if isinstance(report_blob, list):
                                     # Readiness returns list of (status, message) tuples
-                                    formatted = "\n".join(f"[{str(s).upper()}] {m}" for s in report_blob if len(report_blob) > 0 and isinstance(s, str))
+                                    formatted = "\n".join(f"[{str(s).upper()}] {m}" for s, m in report_blob)
                                     log_entry.log_output += f"{action.upper()} OUTPUT:\n{formatted}\n"
                                     
                                     # Check for stubs
