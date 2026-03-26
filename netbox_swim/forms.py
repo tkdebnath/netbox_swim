@@ -240,7 +240,6 @@ class BulkUpgradeForm(django_forms.Form):
         ),
         required=True,
         initial='execute',
-        widget=django_forms.RadioSelect(attrs={'class': 'list-unstyled'}),
         label="Execution Mode",
         help_text="Select the execution mode for this workflow."
     )
