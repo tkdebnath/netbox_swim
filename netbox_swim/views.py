@@ -795,6 +795,33 @@ class UpgradeJobExecuteView(generic.ObjectView):
 
 
 
+
+class UpgradeJobCancelView(generic.ObjectEditView):
+    queryset = models.UpgradeJob.objects.all()
+    
+    def get(self, request, *args, **kwargs):
+        from django.utils import timezone
+        from django.shortcuts import redirect
+        obj = self.get_object(kwargs)
+        if obj.status in ['pending', 'scheduled', 'running']:
+            obj.status = 'cancelled'
+            obj.end_time = timezone.now()
+            
+            # Inject cancellation reason into job logs
+            if not isinstance(obj.job_log, list):
+                obj.job_log = []
+            obj.job_log.append({
+                "time": timezone.now().isoformat(),
+                "level": "warning",
+                "message": "Job cancelled by user request."
+            })
+            obj.save()
+            messages.warning(request, f"Upgrade Job {obj.pk} manually cancelled.")
+        return redirect('plugins:netbox_swim:upgradejob', pk=obj.pk)
+
+    def post(self, request, *args, **kwargs):
+        return self.get(request, *args, **kwargs)
+
 # ============================================================
 # PILLAR: Sync Record Consolidation
 # ============================================================

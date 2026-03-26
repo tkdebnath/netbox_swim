@@ -10,6 +10,14 @@
     </button>
 </form>
 {% endif %}
+{% if object.status == 'pending' or object.status == 'scheduled' or object.status == 'running' %}
+<form method="post" action="{% url 'plugins:netbox_swim:upgradejob_cancel' pk=object.pk %}" style="display: inline-block;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-warning">
+        <i class="mdi mdi-cancel"></i> Cancel Job
+    </button>
+</form>
+{% endif %}
 {% if object.logs.count or object.job_log %}
 <div class="dropdown" style="display: inline-block;">
     <button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" id="downloadsMenuButton" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

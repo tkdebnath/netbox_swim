@@ -118,6 +118,7 @@ urlpatterns = (
     path('upgrade-jobs/<int:pk>/edit/', views.UpgradeJobEditView.as_view(), name='upgradejob_edit'),
     path('upgrade-jobs/<int:pk>/delete/', views.UpgradeJobDeleteView.as_view(), name='upgradejob_delete'),
     path('upgrade-jobs/<int:pk>/execute/', views.UpgradeJobExecuteView.as_view(), name='upgradejob_execute'),
+    path('upgrade-jobs/<int:pk>/cancel/', views.UpgradeJobCancelView.as_view(), name='upgradejob_cancel'),
     path('upgrade-jobs/<int:pk>/download-checks/', views.UpgradeJobDownloadChecksView.as_view(), name='upgradejob_download_checks'),
     path('upgrade-jobs/<int:pk>/download-logs/', views.UpgradeJobDownloadLogsView.as_view(), name='upgradejob_download_logs'),
     path('upgrade-jobs/<int:pk>/download-fragment/<str:fragment>/', views.UpgradeJobDownloadFragmentView.as_view(), name='upgradejob_download_fragment'),
