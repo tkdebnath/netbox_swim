@@ -890,18 +890,35 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                                     if isinstance(s, str)
                                 )
                                 if has_failure:
-                                    log_entry.log_output += f"[{lib.upper()}] failed/unsupported. Attempting fallback...\n"
+                                    log_entry.log_output += f"[{lib.upper()}] generated structural failure state. Attempting fallback...\n"
                                     continue
                                 else:
                                     step_success = True
                                     log_entry.is_success = True
                                     break
+                            elif isinstance(report_blob, tuple):
+                                # Distribution, Activation, Verification return (bool, str)
+                                is_success, message = report_blob
+                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{message}\n"
+                                
+                                if is_success:
+                                    step_success = True
+                                    log_entry.is_success = True
+                                    break
+                                else:
+                                    if "not yet implemented" in str(message).lower():
+                                        log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
+                                        continue
+                                    else:
+                                        log_entry.log_output += f"[{lib.upper()}] execution returned deterministic failure.\n"
+                                        step_success = False
+                                        log_entry.is_success = False
+                                        break
                             else:
                                 log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
                                 step_success = True
                                 log_entry.is_success = True
                                 break
-
                     except Exception as e:
                         log_entry.log_output += f"\nERROR using [{lib.upper()}]: {str(e)}\n"
                         continue
