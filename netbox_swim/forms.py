@@ -1,16 +1,16 @@
 from django import forms
 from netbox.forms import NetBoxModelForm, NetBoxModelImportForm
-from utilities.forms.fields import DynamicModelChoiceField
+from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 from dcim.models import Platform, Device, DeviceType, Region, Site
 from . import models
 
 
 class HardwareGroupForm(NetBoxModelForm):
-    platforms = forms.ModelMultipleChoiceField(
+    platforms = DynamicModelMultipleChoiceField(
         queryset=Platform.objects.all(),
         required=False,
     )
-    device_types = forms.ModelMultipleChoiceField(
+    device_types = DynamicModelMultipleChoiceField(
         queryset=DeviceType.objects.all(),
         required=False,
     )
@@ -53,15 +53,15 @@ class WorkflowTemplateCSVForm(NetBoxModelImportForm):
 
 
 class FileServerForm(NetBoxModelForm):
-    regions = forms.ModelMultipleChoiceField(
+    regions = DynamicModelMultipleChoiceField(
         queryset=Region.objects.all(),
         required=False,
     )
-    sites = forms.ModelMultipleChoiceField(
+    sites = DynamicModelMultipleChoiceField(
         queryset=Site.objects.all(),
         required=False,
     )
-    devices = forms.ModelMultipleChoiceField(
+    devices = DynamicModelMultipleChoiceField(
         queryset=Device.objects.all(),
         required=False,
     )
@@ -76,11 +76,11 @@ class FileServerForm(NetBoxModelForm):
 
 class SoftwareImageForm(NetBoxModelForm):
     platform = DynamicModelChoiceField(queryset=Platform.objects.all())
-    device_types = forms.ModelMultipleChoiceField(
+    device_types = DynamicModelMultipleChoiceField(
         queryset=DeviceType.objects.all(),
         required=False,
     )
-    hardware_groups = forms.ModelMultipleChoiceField(
+    hardware_groups = DynamicModelMultipleChoiceField(
         queryset=models.HardwareGroup.objects.all(),
         required=False,
     )

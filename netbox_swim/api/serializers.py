@@ -6,9 +6,12 @@ from ..models import (
     HardwareGroup, FileServer, DeviceSyncRecord, SyncJob,
     ValidationCheck, CheckTemplate
 )
+from dcim.api.serializers import NestedPlatformSerializer, NestedDeviceTypeSerializer, NestedRegionSerializer, NestedSiteSerializer, NestedDeviceSerializer
 
 
 class HardwareGroupSerializer(NetBoxModelSerializer):
+    platforms = NestedPlatformSerializer(many=True, required=False)
+    device_types = NestedDeviceTypeSerializer(many=True, required=False)
     class Meta:
         model = HardwareGroup
         fields = (
@@ -28,6 +31,8 @@ class FileServerSerializer(NetBoxModelSerializer):
 
 
 class SoftwareImageSerializer(NetBoxModelSerializer):
+    platform = NestedPlatformSerializer(required=False)
+    device_types = NestedDeviceTypeSerializer(many=True, required=False)
     class Meta:
         model = SoftwareImage
         fields = (
