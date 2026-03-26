@@ -188,7 +188,7 @@ class CiscoDistributeUnicon(UniconTask):
                     action=None, loop_continue=False
                 ),
                 Statement(
-                    pattern=r'(?i)timed out|(?i)connection timed out',
+                    pattern=r'(?i)timed out|connection timed out',
                     action=None, loop_continue=False
                 ),
             ])
