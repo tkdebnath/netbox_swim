@@ -58,6 +58,7 @@ urlpatterns = (
     path('golden-images/<int:pk>/edit/', views.GoldenImageEditView.as_view(), name='goldenimage_edit'),
     path('golden-images/<int:pk>/delete/', views.GoldenImageDeleteView.as_view(), name='goldenimage_delete'),
     path('golden-images/<int:pk>/changelog/', ObjectChangeLogView.as_view(), name='goldenimage_changelog', kwargs={'model': models.GoldenImage}),
+    path('golden-images/assignment/', views.GoldenImageAssignmentView.as_view(), name='goldenimage_assignment'),
 
     # ---------------------------------------------------------
     # Pillar 2b: Compliance Report

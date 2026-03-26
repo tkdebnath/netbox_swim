@@ -1220,3 +1220,95 @@ class TestbedDownloadView(View):
         response = HttpResponse(yaml_content, content_type='text/yaml')
         response['Content-Disposition'] = 'attachment; filename="testbed.yaml"'
         return response
+
+
+# ============================================================
+# Golden Image Assignment Matrix
+# ============================================================
+
+class GoldenImageAssignmentView(PermissionRequiredMixin, View):
+    permission_required = 'netbox_swim.view_goldenimage'
+    """
+    Lists all DeviceTypes with their current golden image assignment.
+    Supports bulk assignment: select device types → pick a golden image → assign.
+    """
+
+    def get(self, request):
+        from dcim.models import DeviceType
+        from django_tables2 import RequestConfig
+
+        # Build golden image lookup: device_type_pk → golden image
+        golden_map = {}  # dt_pk → GoldenImage
+        for gi in models.GoldenImage.objects.prefetch_related('device_types').select_related('image'):
+            for dt in gi.device_types.all():
+                golden_map[dt.pk] = gi
+
+        # Build rows for every DeviceType
+        device_types = DeviceType.objects.select_related('manufacturer').order_by('manufacturer__name', 'model')
+        rows = []
+        for dt in device_types:
+            gi = golden_map.get(dt.pk)
+            rows.append({
+                'device_type_pk': dt.pk,
+                'manufacturer': str(dt.manufacturer),
+                'device_type_name': str(dt),
+                'device_type_url': dt.get_absolute_url(),
+                'device_count': Device.objects.filter(device_type=dt).count(),
+                'golden_image_name': str(gi.image) if gi else '',
+                'golden_image_url': gi.get_absolute_url() if gi else '',
+                'golden_version': gi.image.version if gi else '',
+                'deployment_mode': gi.get_deployment_mode_display() if gi else '',
+            })
+
+        table = tables.GoldenImageAssignmentTable(rows)
+        RequestConfig(request, paginate={'per_page': 50}).configure(table)
+
+        # Golden images for the bulk-assign dropdown
+        golden_images = models.GoldenImage.objects.select_related('image').all()
+        software_images = models.SoftwareImage.objects.order_by('image_name')
+
+        return render(request, 'netbox_swim/golden_image_assignment.html', {
+            'table': table,
+            'golden_images': golden_images,
+            'software_images': software_images,
+            'total_device_types': len(rows),
+            'assigned_count': sum(1 for r in rows if r['golden_image_name']),
+            'unassigned_count': sum(1 for r in rows if not r['golden_image_name']),
+        })
+
+    def post(self, request):
+        from dcim.models import DeviceType
+
+        selected_pks = request.POST.getlist('pk')
+        golden_image_pk = request.POST.get('golden_image')
+        action = request.POST.get('action', 'assign')
+
+        if not selected_pks:
+            messages.warning(request, "No device types selected.")
+            return redirect('plugins:netbox_swim:goldenimage_assignment')
+
+        device_types = DeviceType.objects.filter(pk__in=selected_pks)
+
+        if action == 'unassign':
+            # Remove selected device types from all golden images
+            for gi in models.GoldenImage.objects.prefetch_related('device_types'):
+                gi.device_types.remove(*device_types)
+            messages.success(request, f"Removed golden image assignment from {len(selected_pks)} device type(s).")
+        elif golden_image_pk:
+            try:
+                gi = models.GoldenImage.objects.get(pk=golden_image_pk)
+            except models.GoldenImage.DoesNotExist:
+                messages.error(request, "Selected golden image not found.")
+                return redirect('plugins:netbox_swim:goldenimage_assignment')
+
+            # Remove these device types from any other golden images first
+            for other_gi in models.GoldenImage.objects.exclude(pk=gi.pk).prefetch_related('device_types'):
+                other_gi.device_types.remove(*device_types)
+
+            # Add to the selected golden image
+            gi.device_types.add(*device_types)
+            messages.success(request, f"Assigned {len(selected_pks)} device type(s) to golden image: {gi}")
+        else:
+            messages.warning(request, "Please select a golden image to assign.")
+
+        return redirect('plugins:netbox_swim:goldenimage_assignment')

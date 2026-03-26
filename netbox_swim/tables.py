@@ -263,3 +263,48 @@ class ComplianceDashboardTable(tables.Table):
         row_attrs = {'class': 'object-row'}
         orderable = True
 
+
+class GoldenImageAssignmentTable(tables.Table):
+    """
+    Shows every DeviceType with its currently assigned golden image.
+    Rows are dicts, not model instances.
+    """
+    pk = tables.CheckBoxColumn(accessor='device_type_pk', attrs={
+        'td__input': {'name': 'pk', 'value': tables.A('device_type_pk')},
+    })
+    manufacturer = tables.Column(accessor='manufacturer', verbose_name='Manufacturer', orderable=True)
+    device_type = tables.TemplateColumn(
+        template_code='<a href="{{ record.device_type_url }}">{{ record.device_type_name }}</a>',
+        verbose_name='Device Type',
+        orderable=True,
+    )
+    device_count = tables.Column(accessor='device_count', verbose_name='Devices', orderable=True)
+    golden_image = tables.TemplateColumn(
+        template_code='''
+            {% if record.golden_image_name %}
+            <a href="{{ record.golden_image_url }}">{{ record.golden_image_name }}</a>
+            {% else %}
+            <span class="badge text-bg-warning">Not Assigned</span>
+            {% endif %}
+        ''',
+        verbose_name='Golden Image',
+        orderable=True,
+    )
+    golden_version = tables.TemplateColumn(
+        template_code='''
+            {% if record.golden_version %}
+            <code>{{ record.golden_version }}</code>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+        ''',
+        verbose_name='Golden Version',
+        orderable=True,
+    )
+    deployment_mode = tables.Column(accessor='deployment_mode', verbose_name='Mode', orderable=True)
+
+    class Meta:
+        attrs = {'class': 'table table-hover object-list'}
+        row_attrs = {'class': 'object-row'}
+        orderable = True
+
