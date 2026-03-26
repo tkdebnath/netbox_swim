@@ -128,8 +128,22 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
 
         logger.info(f"Starting sync execution for {device.name}")
         result = task.execute(device, auto_update=auto_update)
-        
+
         has_error = any(msg_tuple[0] in ['error', 'failed'] for msg_tuple in result) if isinstance(result, list) else True
+
+        # Always update the sync_record in DB so UI shows the outcome
+        error_lines = []
+        if isinstance(result, list):
+            for status_val, msg in result:
+                ts = timezone.now().strftime('%H:%M:%S')
+                prefix = 'ERROR' if status_val in ('error', 'failed') else status_val.upper()
+                error_lines.append(f"[{ts}] [{prefix}] {msg}")
+
+        sync_record.status = 'failed' if has_error else 'applied'
+        if error_lines:
+            sync_record.log_messages = (sync_record.log_messages or []) + error_lines
+        sync_record.save(update_fields=['status', 'log_messages'])
+
         if not has_error:
             device.custom_field_data['swim_last_sync_status'] = 'success'
             device.custom_field_data['swim_last_successful_sync'] = timezone.now().isoformat()
@@ -137,12 +151,6 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
         else:
             device.custom_field_data['swim_last_sync_status'] = 'error'
             device.save()
-        
-        # Logic in execute() should ideally update this sync_record or create a new one.
-        # For now, we clean up the tracker if it wasn't replaced (some tasks might create a new one instead of using the syncing one).
-        if not DeviceSyncRecord.objects.filter(id=sync_record.id).exclude(status='syncing').exists():
-            # If it's still specifically 'syncing' and hasn't changed, clean it up
-            pass
 
         return result
     except Exception as e:
@@ -195,19 +203,29 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
     results = {}
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         future_to_device = {
-            executor.submit(_sync_device_logic, dev_id, auto_update, connection_library, sync_job.id): dev_id 
+            executor.submit(_sync_device_logic, dev_id, auto_update, connection_library, sync_job.id): dev_id
             for dev_id in device_ids
         }
-        
+
         for future in as_completed(future_to_device):
             dev_id = future_to_device[future]
             try:
-                results[dev_id] = future.result()
+                result = future.result()
+                results[dev_id] = result
+                # Surface per-device result into SyncJob summary so UI always shows outcomes
+                if isinstance(result, list):
+                    for status_val, msg in result:
+                        prefix = 'ERROR' if status_val in ('error', 'failed') else 'OK'
+                        sync_job.summary_logs.append(f"[Device {dev_id}] [{prefix}] {msg}")
+                        if status_val in ('error', 'failed'):
+                            sync_job.failed_device_count += 1
+                            break  # one error entry is enough to count the device as failed
             except Exception as e:
-                logger.error(f"Bulk sync execution exception for device {dev_id}: {str(e)}")
+                logger.error(f"Bulk sync thread exception for device {dev_id}: {str(e)}", exc_info=True)
+                sync_job.summary_logs.append(f"[Device {dev_id}] [ERROR] Unhandled exception: {type(e).__name__}: {e}")
                 results[dev_id] = [("error", str(e))]
                 sync_job.failed_device_count += 1
-                
+
     sync_job.end_time = timezone.now()
     sync_job.status = 'completed' if sync_job.failed_device_count == 0 else 'failed'
     sync_job.summary_logs.append(f"Completed with {sync_job.failed_device_count} failures.")

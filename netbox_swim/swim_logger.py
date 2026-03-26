@@ -5,18 +5,17 @@ Controlled entirely by two keys in PLUGINS_CONFIG:
 
     PLUGINS_CONFIG = {
         'netbox_swim': {
-            'logging':  True,                    # Enable SWIM logging (default: False)
+            'logging':  True,                    # Full DEBUG logging (default: False)
             'log_file': '/path/to/swim.log',     # Optional file path; omit to log stderr only
         }
     }
 
-When `logging` is False (or absent), all SWIM log calls are silently discarded.
-When `logging` is True:
-  - Logs always go to stderr  → visible in `docker logs netbox` / RQ worker output
-  - If `log_file` is set      → also written to a rotating file (10 MB × 5 backups)
+Regardless of 'logging' setting:
+  - ERROR and WARNING always go to stderr → always visible in docker logs
 
-Log level is always DEBUG when logging is enabled so you see every connection
-detail, command sent, and response received.
+When `logging` is True:
+  - Full DEBUG output goes to stderr
+  - If `log_file` is set → also written to a rotating file (10 MB x 5 backups)
 """
 
 import logging
@@ -57,18 +56,24 @@ def _build_swim_logger() -> logging.Logger:
     if logger.handlers:
         return logger
 
-    if not _logging_enabled():
-        # Logging disabled — attach a NullHandler so callsites don't error
-        logger.addHandler(logging.NullHandler())
-        logger.propagate = False
-        return logger
-
-    logger.setLevel(logging.DEBUG)
-
     fmt = logging.Formatter(
         fmt='[%(asctime)s] %(levelname)-8s [SWIM] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+    if not _logging_enabled():
+        # Logging disabled — but ERROR/WARNING still go to stderr
+        # so problems are NEVER invisible in docker logs
+        logger.setLevel(logging.WARNING)
+        err_handler = logging.StreamHandler(sys.stderr)
+        err_handler.setLevel(logging.WARNING)
+        err_handler.setFormatter(fmt)
+        logger.addHandler(err_handler)
+        logger.propagate = False
+        return logger
+
+    # Full logging enabled
+    logger.setLevel(logging.DEBUG)
 
     # Always: stderr (Docker logs / RQ worker output)
     stream_handler = logging.StreamHandler(sys.stderr)
@@ -107,7 +112,6 @@ def _build_swim_logger() -> logging.Logger:
                 file_handler.setFormatter(fmt)
                 logger.addHandler(file_handler)
         except OSError as e:
-            # Print directly to stderr — visible in docker logs even if file logging fails
             print(
                 f"[SWIM] ERROR: Could not create log file '{log_path}': {type(e).__name__}: {e}\n"
                 f"[SWIM] Falling back to stderr-only logging.",
@@ -131,52 +135,42 @@ class SwimSessionLogger:
     """
     Wraps a single device connection session with structured, per-device logging.
 
-    All output goes through `swim_log` and is therefore controlled by the
-    `logging` / `log_file` plugin config keys — no extra configuration needed.
-
-    Usage in execute():
-        session = SwimSessionLogger(device, library='Scrapli')
-        session.connecting(host, username)
-        session.connected()
-        session.command("show version")
-        session.response("show version", raw_output)
-        session.command_failed("show inventory", exc)
-        session.error("Unexpected state", exc=e)
-        session.disconnected()
+    ERROR and WARNING always emit to stderr regardless of 'logging' config.
+    DEBUG and INFO are only emitted when 'logging: True' is set.
     """
 
     def __init__(self, device, library: str = 'unknown'):
         self.device_name = getattr(device, 'name', str(device))
         self.library = library.upper()
-        self._enabled = _logging_enabled()
+        self._verbose = _logging_enabled()  # True = DEBUG+INFO also emitted
         self._prefix = f"[{self.library}] [{self.device_name}]"
 
     # --- Connection lifecycle ---
 
     def connecting(self, host: str, username: str):
-        if self._enabled:
-            swim_log.info(f"{self._prefix} Initiating connection → host={host} user={username}")
+        if self._verbose:
+            swim_log.info(f"{self._prefix} Initiating connection -> host={host} user={username}")
 
     def connected(self):
-        if self._enabled:
-            swim_log.info(f"{self._prefix} ✓ Connection established")
+        if self._verbose:
+            swim_log.info(f"{self._prefix} Connection established")
 
     def disconnected(self):
-        if self._enabled:
+        if self._verbose:
             swim_log.info(f"{self._prefix} Connection closed")
 
     def connect_failed(self, exc: Exception):
-        if self._enabled:
-            swim_log.error(f"{self._prefix} ✗ Connection FAILED: {type(exc).__name__}: {exc}")
+        # Always emit — connection failures must always be visible
+        swim_log.error(f"{self._prefix} Connection FAILED: {type(exc).__name__}: {exc}")
 
     # --- Command / response tracing ---
 
     def command(self, cmd: str):
-        if self._enabled:
+        if self._verbose:
             swim_log.debug(f"{self._prefix} >> CMD: {cmd.strip()}")
 
     def response(self, cmd: str, output: str):
-        if self._enabled:
+        if self._verbose:
             preview = (output or '').strip()
             max_chars = 2000
             if len(preview) > max_chars:
@@ -184,28 +178,28 @@ class SwimSessionLogger:
             swim_log.debug(f"{self._prefix} << RESPONSE [{cmd.strip()}]:\n{preview}")
 
     def command_failed(self, cmd: str, exc: Exception):
-        if self._enabled:
-            swim_log.error(
-                f"{self._prefix} ✗ Command FAILED [{cmd.strip()}]: {type(exc).__name__}: {exc}"
-            )
+        # Always emit — command failures must always be visible
+        swim_log.error(
+            f"{self._prefix} Command FAILED [{cmd.strip()}]: {type(exc).__name__}: {exc}"
+        )
 
     # --- General event logging ---
 
     def error(self, message: str, exc: Exception = None):
-        if self._enabled:
-            if exc:
-                swim_log.error(f"{self._prefix} ERROR — {message}: {type(exc).__name__}: {exc}")
-            else:
-                swim_log.error(f"{self._prefix} ERROR — {message}")
+        # Always emit
+        if exc:
+            swim_log.error(f"{self._prefix} ERROR: {message}: {type(exc).__name__}: {exc}")
+        else:
+            swim_log.error(f"{self._prefix} ERROR: {message}")
 
     def warning(self, message: str):
-        if self._enabled:
-            swim_log.warning(f"{self._prefix} WARNING — {message}")
+        # Always emit
+        swim_log.warning(f"{self._prefix} WARNING: {message}")
 
     def info(self, message: str):
-        if self._enabled:
+        if self._verbose:
             swim_log.info(f"{self._prefix} {message}")
 
     def debug(self, message: str):
-        if self._enabled:
+        if self._verbose:
             swim_log.debug(f"{self._prefix} {message}")
