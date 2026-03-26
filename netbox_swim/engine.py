@@ -804,80 +804,102 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                 continue
                 
             # --- 2. Iterate libraries by sequence until success ---
-            executor_class = None
-            for lib in priority_list:
-                executor_class = TASK_REGISTRY[action].get(lib)
-                if executor_class:
-                    log_entry.log_output += f"Attempting execution using connection library: [{lib.upper()}]\n"
-                    break
-                    
-            if not executor_class:
-                raise Exception(f"No suitable connection libraries found in priority string: {base_priority}")
-
-            executor = executor_class()
+            step_success = False
             
             # Action Mapping
             if mock_run:
                 log_entry.log_output += f"\n[MOCK RUN] Mocking {action} step. No real connections established.\n"
                 log_entry.is_success = True
+                step_success = True
             elif dry_run and action in ['distribution', 'activation', 'verification']:
                 log_entry.log_output += f"\n[DRY RUN] Bypassing actual {action} logic (State manipulation disabled).\n"
                 log_entry.is_success = True
+                step_success = True
             else:
-                if action in ['precheck', 'postcheck']:
-                    output_dirs, report_blob = executor.execute(device, target_image, step=step, job=upgrade, phase=action)
-                    log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + str(report_blob)
-                    
-                    if action == 'precheck':
-                        precheck_output = report_blob
-                    else:
-                        postcheck_output = report_blob
+                for lib in priority_list:
+                    executor_class = TASK_REGISTRY[action].get(lib)
+                    if not executor_class:
+                        continue
                         
-                        # Auto-Diff Fallback directly here since it works
-                        log_entry.log_output += "\n--- PRE/POST DIFF REPORT ---\n"
-                        diff = list(difflib.unified_diff(
-                            precheck_output.splitlines(keepends=True),
-                            postcheck_output.splitlines(keepends=True),
-                            fromfile='Pre-Upgrade',
-                            tofile='Post-Upgrade',
-                            n=0
-                        ))
-                        if not diff:
-                            log_entry.log_output += "No operational differences detected."
-                        else:
-                            log_entry.log_output += "".join(diff)
+                    log_entry.log_output += f"\nAttempting execution using connection library: [{lib.upper()}]\n"
+                    executor = executor_class()
+                    
+                    try:
+                        if action in ['precheck', 'postcheck']:
+                            output_dirs, report_blob = executor.execute(device, target_image, step=step, job=upgrade, phase=action)
+                            log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
                             
-                    log_entry.is_success = True
-                else:
-                    # Execute Distribution, Activation, Readiness
-                    report_blob = executor.execute(device, target_image)
-                    
-                    # Format output based on return type
-                    if isinstance(report_blob, list):
-                        # Readiness returns list of (status, message) tuples
-                        formatted = "\n".join(f"[{s.upper()}] {m}" for s, m in report_blob)
-                        log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + formatted
-                        
-                        # Check for failures in readiness results
-                        failure_indicators = {'failed', 'fail', 'error'}
-                        has_failure = any(
-                            s.lower() in failure_indicators 
-                            for s, m in report_blob 
-                            if isinstance(s, str)
-                        )
-                        if has_failure:
-                            log_entry.is_success = False
-                            overall_success = False
-                        else:
+                            # Standard executors return output_dirs=None to indicate an un-recoverable fault/not-implemented. 
+                            if output_dirs is None:
+                                log_entry.log_output += f"[{lib.upper()}] aborted checks gracefully. Attempting fallback...\n"
+                                continue
+                                
+                            if action == 'precheck':
+                                precheck_output = report_blob
+                            else:
+                                postcheck_output = report_blob
+                                
+                                # Auto-Diff Fallback directly here since it works
+                                log_entry.log_output += "\n--- PRE/POST DIFF REPORT ---\n"
+                                diff = list(difflib.unified_diff(
+                                    precheck_output.splitlines(keepends=True),
+                                    postcheck_output.splitlines(keepends=True),
+                                    fromfile='Pre-Upgrade',
+                                    tofile='Post-Upgrade',
+                                    n=0
+                                ))
+                                if not diff:
+                                    log_entry.log_output += "No operational differences detected."
+                                else:
+                                    log_entry.log_output += "".join(diff)
+                                    
+                            step_success = True
                             log_entry.is_success = True
-                    else:
-                        log_entry.log_output += f"\n{action.upper()} OUTPUT:\n" + str(report_blob)
-                        log_entry.is_success = True
+                            break
+                            
+                        else:
+                            # Execute Distribution, Activation, Readiness, Verification
+                            report_blob = executor.execute(device, target_image)
+                            
+                            # Format output based on return type
+                            if isinstance(report_blob, list):
+                                # Readiness returns list of (status, message) tuples
+                                formatted = "\n".join(f"[{s.upper()}] {m}" for s, m in report_blob)
+                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{formatted}\n"
+                                
+                                # Check for failures in structured results
+                                failure_indicators = {'failed', 'fail', 'error'}
+                                has_failure = any(
+                                    s.lower() in failure_indicators 
+                                    for s, m in report_blob 
+                                    if isinstance(s, str)
+                                )
+                                if has_failure:
+                                    log_entry.log_output += f"[{lib.upper()}] failed/unsupported. Attempting fallback...\n"
+                                    continue
+                                else:
+                                    step_success = True
+                                    log_entry.is_success = True
+                                    break
+                            else:
+                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
+                                step_success = True
+                                log_entry.is_success = True
+                                break
+
+                    except Exception as e:
+                        log_entry.log_output += f"\nERROR using [{lib.upper()}]: {str(e)}\n"
+                        continue
+                        
+                if not step_success:
+                    overall_success = False
+                    log_entry.is_success = False
+                    log_entry.log_output += f"\n[FATAL] Exhausted all fallback connection libraries. Action {action.upper()} failed.\n"
 
         except Exception as e:
             overall_success = False
             log_entry.is_success = False
-            log_entry.log_output += f"\nERROR: {str(e)}"
+            log_entry.log_output += f"\nCRITICAL ENGINE ERROR: {str(e)}"
         
         log_entry.save()
         if not overall_success:
