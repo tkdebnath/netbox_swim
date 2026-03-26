@@ -756,15 +756,28 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                     reachable = False
                     for attempt in range(1, retries + 1):
                         try:
+                            # Use shell=True to avoid uncaught FileNotFoundError Python exceptions if ping is entirely missing
                             result = subprocess.call(
-                                ['ping', '-c', '1', host],
+                                f"ping -c 1 {host}",
+                                shell=True,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
                             )
                             if result == 0:
-                                log_entry.log_output += f"Device {device.name} is reachable! (attempt {attempt})\n"
+                                log_entry.log_output += f"Device {device.name} is reachable via ICMP! (attempt {attempt})\n"
                                 reachable = True
                                 break
-                        except subprocess.TimeoutExpired:
+                            else:
+                                # Fallback: NetBox Docker containers often natively lack the 'ping' binary.
+                                # Or ICMP might be blocked by firewalls. We silently test TCP 22 (SSH).
+                                import socket
+                                with socket.socket(socket.AF_INET, socket.socket.SOCK_STREAM) as s:
+                                    s.settimeout(2)
+                                    if s.connect_ex((host, 22)) == 0:
+                                        log_entry.log_output += f"Device {device.name} is reachable via TCP:22 (SSH)! (attempt {attempt})\n"
+                                        reachable = True
+                                        break
+                        except Exception as e:
+                            # Catch timeout or OS errors
                             pass
                         
                         log_entry.log_output += f"Ping attempt {attempt}/{retries} failed. Retrying in {interval}s...\n"
