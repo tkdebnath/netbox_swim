@@ -60,27 +60,11 @@ class CiscoVerifyNetmiko(NetmikoTask, CiscoVerifyLogicMixin):
             return False, f"Verification connection error: {e}"
 
 class CiscoVerifyUnicon(UniconTask, CiscoVerifyLogicMixin):
-    """
-    Post-Activation Version Verification.
-    Connects to the device, retrieves the current running firmware version,
-    and compares it to the Job's target_image.version via CiscoShowVersionParser.
-    """
-    
-    # Define which device platforms support verification using Unicon
-    SUPPORTED_PLATFORMS = ['ios', 'iosxe', 'nxos']
-
     def execute(self, device, target_image=None, **kwargs):
-        os_type = "iosxe"
-        if hasattr(device, 'platform') and device.platform:
-            os_type = getattr(device.platform, 'slug', 'iosxe')
-            
-        if os_type not in self.SUPPORTED_PLATFORMS:
-            return False, f"Verification not supported for platform '{os_type}'. Supported: {', '.join(self.SUPPORTED_PLATFORMS)}"
-
         try:
-            with self.connect(device, connection_timeout=60) as pyats_device:
-                output = pyats_device.execute('show version')
+            with self.connect(device, connection_timeout=60) as conn:
+                output = conn.execute("show version")
                 return self._evaluate_verification(device, target_image, output)
         except Exception as e:
             logger.error(f"[Verification Unicon] {device.name}: {e}")
-            return False, f"Verification connection error: {str(e)}"
+            return False, f"Verification connection error: {e}"
