@@ -29,6 +29,8 @@ jobs:
 
       - name: Run Database Migrations
         run: |
-          # Ensure any new tables/fields in your plugin are created
-          docker exec netbox-docker-netbox-1 python3 manage.py migrate
-          docker exec netbox-docker-netbox-1 python3 manage.py clear_cache
+          # Auto-generate any missing migration (no-op if nothing changed)
+          docker exec netbox-docker-netbox-1 python3 manage.py makemigrations --no-input
+          # Apply all migrations
+          docker exec netbox-docker-netbox-1 python3 manage.py migrate --no-input
+          
