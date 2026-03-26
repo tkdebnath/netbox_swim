@@ -833,8 +833,28 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
 
             # --- Task Registry steps (require SSH connection) ---
             # Module Mapping logic
+            if action == 'report':
+                # Generate a summary report from all previous log entries
+                all_logs = JobLog.objects.filter(job=upgrade).exclude(id=log_entry.id).order_by('created')
+                passed = sum(1 for l in all_logs if l.is_success)
+                failed = sum(1 for l in all_logs if not l.is_success)
+                total = passed + failed
+
+                log_entry.log_output += f"\n=== UPGRADE REPORT: {device.name} ===\n"
+                log_entry.log_output += f"Target Image: {target_image}\n"
+                log_entry.log_output += f"Steps Executed: {total} | Passed: {passed} | Failed: {failed}\n\n"
+
+                for prev_log in all_logs:
+                    status_icon = "PASS" if prev_log.is_success else "FAIL"
+                    log_entry.log_output += f"  [{status_icon}] {prev_log.action_type}\n"
+
+                log_entry.log_output += f"\nOverall Result: {'SUCCESS' if overall_success else 'FAILED'}\n"
+                log_entry.is_success = overall_success
+                log_entry.save()
+                continue
+
             if action not in TASK_REGISTRY:
-                plan = self.generate_pipeline_plan(upgrade.id)
+                plan = generate_pipeline_plan(upgrade.id)
                 log_entry.log_output += f"\nNative execution plan block reached. Proceeding.\n{str(plan)}"
                 # Sleep/Reboot
                 if action == 'reboot':
@@ -844,7 +864,7 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                     pr = PingReachability()
                     pr.execute(device)
                     log_entry.log_output += f"\nPing Reachability executed natively.\n"
-                    
+
                 step_success = True
             else:
                 # --- 2. Iterate libraries by sequence until success ---
