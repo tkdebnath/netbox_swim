@@ -518,8 +518,8 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
                 # our parsers receive raw CLI text, not structured dicts.
                 hostname = None
                 try:
-                    if hasattr(conn, 'hostname') and conn.hostname:
-                        hostname = str(conn.hostname)
+                    if hasattr(conn, 'learned_hostname') and conn.learned_hostname:
+                        hostname = str(conn.learned_hostname)
                 except Exception:
                     pass
 
