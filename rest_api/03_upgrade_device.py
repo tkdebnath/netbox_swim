@@ -6,14 +6,14 @@ Usage:
     export NETBOX_URL=http://localhost:8000
     export NETBOX_TOKEN=your-token
 
-    # Run upgrade for a single job
+    # Submit upgrade + monitor + auto-download (one shot)
+    python 03_upgrade_device.py --go --device-ids 1,2,3
+
+    # Run upgrade for a single existing job
     python 03_upgrade_device.py --run --job-id 1
 
-    # Bulk upgrade multiple devices
+    # Bulk upgrade (submit only, no monitoring)
     python 03_upgrade_device.py --bulk --device-ids 1,2,3
-
-    # Bulk upgrade with scheduling
-    python 03_upgrade_device.py --bulk --device-ids 1,2,3 --scheduled "2026-03-30T02:00:00Z"
 
     # Check single job status
     python 03_upgrade_device.py --status --job-id 1
@@ -26,9 +26,6 @@ Usage:
 
     # Cancel a job
     python 03_upgrade_device.py --cancel --job-id 1
-
-    # Dry run (shows what would happen without executing)
-    python 03_upgrade_device.py --dry-run --job-id 1
 
     # List recent upgrade jobs
     python 03_upgrade_device.py --list
@@ -210,6 +207,102 @@ def dashboard(interval=10):
         time.sleep(interval)
 
 
+# ---- Submit + Monitor + Auto-Download ----
+
+def download_checks_for_job(job_id, output_dir="./downloads"):
+    """Download the checks ZIP for a completed job."""
+    os.makedirs(output_dir, exist_ok=True)
+    r = requests.get(f"{BASE_URL}/api/plugins/swim/upgrade-jobs/{job_id}/download_checks/",
+                     headers={"Authorization": f"Token {TOKEN}"})
+    if r.status_code == 200:
+        cd = r.headers.get("Content-Disposition", "")
+        filename = f"job_{job_id}_checks.zip"
+        if 'filename="' in cd:
+            filename = cd.split('filename="')[1].rstrip('"')
+        filepath = os.path.join(output_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(r.content)
+        print(f"OK   Downloaded: {filepath} ({len(r.content)/1024:.1f} KB)")
+    else:
+        print(f"     No check files available for job #{job_id}")
+
+
+def get_jobs_for_devices(device_ids):
+    """Get the most recent upgrade job for each device."""
+    jobs = []
+    for dev_id in device_ids:
+        r = requests.get(f"{BASE_URL}/api/plugins/swim/upgrade-jobs/?device_id={dev_id}&limit=1",
+                         headers=HEADERS)
+        if r.status_code == 200:
+            results = r.json().get("results", [])
+            if results:
+                jobs.append(results[0])
+    return jobs
+
+
+def upgrade_and_monitor(device_ids, connection_library="scrapli", interval=10, output_dir="./downloads"):
+    """Submit bulk upgrade, monitor all device jobs, auto-download files when done."""
+
+    # 1. Submit the bulk upgrade
+    payload = {
+        "device_ids": device_ids,
+        "connection_library": connection_library,
+        "execution_mode": "execute",
+    }
+    r = requests.post(f"{BASE_URL}/api/plugins/swim/upgrade-jobs/execute_bulk_remediation/",
+                      headers=HEADERS, json=payload)
+    if r.status_code not in (200, 201):
+        print(f"FAIL submitting upgrade: {r.status_code}: {r.text[:200]}")
+        return
+
+    print(f"OK   Bulk upgrade submitted for {len(device_ids)} device(s)")
+    print(f"     Waiting for jobs to be created...")
+    time.sleep(5)
+
+    # 2. Find the jobs for our devices
+    jobs = get_jobs_for_devices(device_ids)
+    if not jobs:
+        print("WARN No upgrade jobs found for these devices. Check --list")
+        return
+
+    job_ids = [j["id"] for j in jobs]
+    print(f"OK   Tracking {len(job_ids)} upgrade job(s): {job_ids}")
+
+    # 3. Monitor until all are done
+    while True:
+        all_done = True
+        print(f"\n{'='*60}")
+        print(f"  Upgrade Monitor — {time.strftime('%H:%M:%S')}")
+        print(f"{'='*60}")
+
+        for jid in job_ids:
+            r = requests.get(f"{BASE_URL}/api/plugins/swim/upgrade-jobs/{jid}/", headers=HEADERS)
+            if r.status_code != 200:
+                continue
+            j = r.json()
+            device = j.get("device", {})
+            name = device.get("display", "?") if isinstance(device, dict) else str(device)
+            status = j.get("status", "?")
+            print(f"  Job #{jid:>4}  {name:<20}  [{status}]")
+
+            if status in ("pending", "running", "scheduled"):
+                all_done = False
+
+        if all_done:
+            print(f"\nAll jobs finished!")
+            break
+
+        print(f"\n... checking again in {interval}s ...")
+        time.sleep(interval)
+
+    # 4. Auto-download check files for each completed job
+    print(f"\nDownloading check files...")
+    for jid in job_ids:
+        download_checks_for_job(jid, output_dir)
+
+    print(f"\nDone! Files saved to: {output_dir}/")
+
+
 # ---- List Jobs ----
 
 def list_jobs(limit=20):
@@ -236,8 +329,9 @@ def list_jobs(limit=20):
 # ============================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SWIM Upgrade Operations")
+    parser.add_argument("--go", action="store_true", help="Submit + monitor + auto-download (one shot)")
     parser.add_argument("--run", action="store_true", help="Run a single upgrade job")
-    parser.add_argument("--bulk", action="store_true", help="Bulk upgrade multiple devices")
+    parser.add_argument("--bulk", action="store_true", help="Bulk upgrade (submit only)")
     parser.add_argument("--status", action="store_true", help="Check job status")
     parser.add_argument("--monitor", action="store_true", help="Monitor job until done")
     parser.add_argument("--dashboard", action="store_true", help="Live dashboard of all jobs")
@@ -249,11 +343,16 @@ if __name__ == "__main__":
     parser.add_argument("--library", type=str, default="scrapli", help="Connection library")
     parser.add_argument("--mode", type=str, default="execute",
                         help="Execution mode: execute, dry_run, mock_run")
-    parser.add_argument("--scheduled", type=str, default=None,
-                        help="Schedule time ISO-8601 (e.g. 2026-03-30T02:00:00Z)")
+    parser.add_argument("--output-dir", type=str, default="./downloads", help="Download output dir")
     args = parser.parse_args()
 
-    if args.run:
+    if args.go:
+        ids = [int(x) for x in args.device_ids.split(",") if x.strip()]
+        if not ids:
+            print("ERROR: Provide --device-ids"); sys.exit(1)
+        upgrade_and_monitor(ids, args.library, output_dir=args.output_dir)
+
+    elif args.run:
         if not args.job_id:
             print("ERROR: Provide --job-id"); sys.exit(1)
         run_upgrade(args.job_id, args.library)
@@ -262,7 +361,7 @@ if __name__ == "__main__":
         ids = [int(x) for x in args.device_ids.split(",") if x.strip()]
         if not ids:
             print("ERROR: Provide --device-ids"); sys.exit(1)
-        bulk_upgrade(ids, args.library, args.mode, args.scheduled)
+        bulk_upgrade(ids, args.library, args.mode)
 
     elif args.status:
         if not args.job_id:

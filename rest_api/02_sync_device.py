@@ -6,16 +6,16 @@ Usage:
     export NETBOX_URL=http://localhost:8000
     export NETBOX_TOKEN=your-token
 
-    # Sync a single device
-    python 02_sync_device.py --sync --device-ids 1
+    # Sync and monitor in one shot (submit + watch until done)
+    python 02_sync_device.py --go --device-ids 1,2,3
 
-    # Sync multiple devices
+    # Sync only (no monitoring)
     python 02_sync_device.py --sync --device-ids 1,2,3
 
     # Check sync job status
     python 02_sync_device.py --status --job-id 5
 
-    # Monitor sync job until complete
+    # Monitor existing sync job until complete
     python 02_sync_device.py --monitor --job-id 5
 
     # Cancel a running sync
@@ -105,6 +105,54 @@ def monitor_sync(job_id, interval=5):
         time.sleep(interval)
 
 
+# ---- Submit + Monitor in one shot ----
+
+def get_latest_sync_job_id():
+    """Get the ID of the most recent sync job."""
+    r = requests.get(f"{BASE_URL}/api/plugins/swim/sync-jobs/?limit=1", headers=HEADERS)
+    if r.status_code == 200:
+        jobs = r.json().get("results", [])
+        if jobs:
+            return jobs[0]["id"]
+    return None
+
+
+def sync_and_monitor(device_ids, connection_library="scrapli", interval=5):
+    """Submit a sync job, find the new job, and monitor it until done."""
+
+    # Remember the latest job ID before we submit
+    old_latest = get_latest_sync_job_id()
+
+    # Submit the sync
+    payload = {
+        "device_ids": device_ids,
+        "connection_library": connection_library,
+    }
+    r = requests.post(f"{BASE_URL}/api/plugins/swim/upgrade-jobs/execute_bulk_remediation/",
+                      headers=HEADERS, json=payload)
+    if r.status_code not in (200, 201):
+        print(f"FAIL submitting sync: {r.status_code}: {r.text[:200]}")
+        return
+
+    print(f"OK   Sync submitted for {len(device_ids)} device(s)")
+
+    # Wait a moment for the job to be created, then find the new job ID
+    job_id = None
+    for _ in range(10):
+        time.sleep(2)
+        new_latest = get_latest_sync_job_id()
+        if new_latest and new_latest != old_latest:
+            job_id = new_latest
+            break
+
+    if not job_id:
+        print("WARN Could not detect new sync job ID. Check manually with --list")
+        return
+
+    print(f"OK   Detected new Sync Job #{job_id}")
+    monitor_sync(job_id, interval)
+
+
 # ---- List recent sync jobs ----
 
 def list_sync_jobs(limit=10):
@@ -128,7 +176,8 @@ def list_sync_jobs(limit=10):
 # ============================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SWIM Sync Operations")
-    parser.add_argument("--sync", action="store_true", help="Start a new sync")
+    parser.add_argument("--go", action="store_true", help="Submit sync + monitor until done (one shot)")
+    parser.add_argument("--sync", action="store_true", help="Start a new sync (no monitoring)")
     parser.add_argument("--status", action="store_true", help="Check sync job status")
     parser.add_argument("--monitor", action="store_true", help="Monitor sync job until done")
     parser.add_argument("--cancel", action="store_true", help="Cancel a running sync")
@@ -138,7 +187,14 @@ if __name__ == "__main__":
     parser.add_argument("--library", type=str, default="scrapli", help="Connection library")
     args = parser.parse_args()
 
-    if args.sync:
+    if args.go:
+        ids = [int(x) for x in args.device_ids.split(",") if x.strip()]
+        if not ids:
+            print("ERROR: Provide --device-ids (e.g. --device-ids 1,2,3)")
+            sys.exit(1)
+        sync_and_monitor(ids, args.library)
+
+    elif args.sync:
         ids = [int(x) for x in args.device_ids.split(",") if x.strip()]
         if not ids:
             print("ERROR: Provide --device-ids (e.g. --device-ids 1,2,3)")
