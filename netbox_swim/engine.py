@@ -528,8 +528,12 @@ def generate_pipeline_plan(job_id):
     if candidates:
         fs_chain = " → ".join(f"{fs.name} ({fs.ip_address}, pri={fs.priority})" for fs in candidates)
         fs_info = f"{candidates[0].name} (primary)"
+        
+        base_path = candidates[0].base_path.strip('/') if candidates[0].base_path else ""
+        path_segment = f"/{base_path}/{target_image.image_file_name}" if base_path else f"/{target_image.image_file_name}"
+        
         dl_link = (f"{candidates[0].protocol}://{candidates[0].username}:***@"
-                   f"{candidates[0].ip_address}/{candidates[0].base_path}/{target_image.image_file_name}")
+                   f"{candidates[0].ip_address}{path_segment}")
     else:
         fs_chain = "None — no file server matched"
         fs_info = "None Assigned"

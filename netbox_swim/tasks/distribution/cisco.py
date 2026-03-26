@@ -62,8 +62,11 @@ class CiscoDistributeUnicon(UniconTask):
         protocol = fs.protocol.lower()
         auth_str = f"{fs.username}:{fs.password}@" if fs.username else ""
         port_str = f":{fs.port}" if fs.port else ""
-        base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
-        return f"copy {protocol}://{auth_str}{fs.ip_address}{port_str}/{base_path}{file_name} {dest_path}"
+        
+        base = fs.base_path.strip('/') if fs.base_path else ""
+        path_segment = f"/{base}/{file_name}" if base else f"/{file_name}"
+        
+        return f"copy {protocol}://{auth_str}{fs.ip_address}{port_str}{path_segment} {dest_path}"
     
     # Alias — HTTPS uses same syntax as HTTP
     _build_copy_cmd_https = _build_copy_cmd_http
