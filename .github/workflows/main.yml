@@ -29,8 +29,6 @@ jobs:
 
       - name: Run Database Migrations
         run: |
-          # Auto-generate any missing migration (no-op if nothing changed)
-          docker exec netbox-docker-netbox-1 python3 manage.py makemigrations --no-input
-          # Apply all migrations
+          # Migrations are committed to the repo — just apply them
           docker exec netbox-docker-netbox-1 python3 manage.py migrate --no-input
           
