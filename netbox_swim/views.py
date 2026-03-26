@@ -398,7 +398,7 @@ class UpgradeJobView(generic.ObjectView):
     queryset = models.UpgradeJob.objects.all()
 
     def get_extra_context(self, request, instance):
-        """Build a full pipeline lineage / lifecycle context for the detail template."""
+        """Build the full context for the upgrade job detail page."""
         context = {}
         device = instance.device
         target_image = instance.target_image
@@ -483,7 +483,7 @@ class UpgradeJobView(generic.ObjectView):
         if candidates and target_image:
             fs = candidates[0]
             context['file_server'] = fs
-            # Build clean URL — strip slashes from parts, then join with /
+            # Build clean download URL — avoid double slashes
             parts = [fs.ip_address]
             if fs.base_path and fs.base_path.strip('/'):
                 parts.append(fs.base_path.strip('/'))

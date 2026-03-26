@@ -318,7 +318,7 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
             try:
                 result = future.result()
                 results[dev_id] = result
-                # Surface per-device result into SyncJob summary so UI always shows outcomes
+                # Log per-device result into SyncJob summary
                 if isinstance(result, list):
                     for status_val, msg in result:
                         if status_val == 'aborted':
