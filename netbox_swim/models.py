@@ -217,7 +217,6 @@ class DeviceCompliance(NetBoxModel):
     def get_absolute_url(self):
         return reverse('plugins:netbox_swim:devicecompliance', args=[self.pk])
 
-
 class ValidationCheck(NetBoxModel):
     """
     A specific Genie or CLI command check.

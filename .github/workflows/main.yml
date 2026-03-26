@@ -30,5 +30,5 @@ jobs:
       - name: Run Database Migrations
         run: |
           # Migrations are committed to the repo — just apply them
-          docker exec netbox-docker-netbox-1 python3 manage.py migrate --no-input
-          
+          # docker exec netbox-docker-netbox-1 python3 manage.py makemigrations netbox_swim --no-input
+          docker exec netbox-docker-netbox-1 python3 manage.py migrate netbox_swim --no-input
