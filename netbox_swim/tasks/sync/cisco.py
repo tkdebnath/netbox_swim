@@ -376,6 +376,7 @@ class SyncCiscoIosDeviceScrapli(ScrapliTask, CiscoSyncLogicMixin):
 
     def execute(self, device, target_image=None, auto_update=False):
         host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        _, username, _, _, _ = self._get_credentials(device)
         try:
             with self.connect(device) as conn:
                 slug = getattr(device.platform, 'slug', 'cisco_ios')
@@ -421,7 +422,7 @@ class SyncCiscoIosDeviceScrapli(ScrapliTask, CiscoSyncLogicMixin):
             frames = _tb.extract_tb(e.__traceback__)
             loc = f"{frames[-1].filename.split('/')[-1]}:{frames[-1].lineno}" if frames else 'unknown'
             msg = (
-                f"[Scrapli] Connection to {device.name} ({host}:22) FAILED "
+                f"[Scrapli] Connection to {device.name} ({username}@{host}:22) FAILED "
                 f"at {loc}: {type(e).__name__}: {e}"
             )
             return [("error", msg)]
@@ -432,6 +433,7 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
 
     def execute(self, device, target_image=None, auto_update=False):
         host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        _, username, _, _, _ = self._get_credentials(device)
         try:
             with self.connect(device) as conn:
                 slug = device.platform.slug if device.platform else 'cisco_ios'
@@ -475,7 +477,7 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
             frames = _tb.extract_tb(e.__traceback__)
             loc = f"{frames[-1].filename.split('/')[-1]}:{frames[-1].lineno}" if frames else 'unknown'
             msg = (
-                f"[Netmiko] Connection to {device.name} ({host}:22) FAILED "
+                f"[Netmiko] Connection to {device.name} ({username}@{host}:22) FAILED "
                 f"at {loc}: {type(e).__name__}: {e}"
             )
             return [("error", msg)]
@@ -486,6 +488,7 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
 
     def execute(self, device, target_image=None, auto_update=False):
         host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        _, username, _, _, _ = self._get_credentials(device)
         try:
             with self.connect(device, log_stdout=True, learn_hostname=True) as conn:
                 slug = device.platform.slug if device.platform else 'cisco_ios'

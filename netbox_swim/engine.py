@@ -27,9 +27,13 @@ def _log(job_obj, action_type, is_success=True, log_output='', step=None):
 # Device Sync Background Task
 # ============================================================
 
-def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli', sync_job_id=None):
+def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli', sync_job_id=None, finalize_job=True):
     """
     Core synchronous logic for syncing a single device.
+    When finalize_job=True (default), this function finalizes the SyncJob after
+    completing — used when called directly as a standalone RQ task.
+    When finalize_job=False, the caller (execute_bulk_sync_batch) handles
+    SyncJob finalization itself.
     """
     from dcim.models import Device
     logger.info(f"Initiating Sync Logic for Device ID {device_id} (AutoUpdate={auto_update}, Library={connection_library})")
@@ -166,6 +170,10 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
             device.custom_field_data['swim_last_sync_status'] = 'error'
             device.save()
 
+        # Finalize the SyncJob if we're the sole owner (called directly, not from batch)
+        if finalize_job and sync_job_id:
+            _finalize_sync_job(sync_job_id, has_error=has_error, result=result)
+
         return result
     except Exception as e:
         from .models import DeviceSyncRecord
@@ -185,7 +193,43 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
         if 'sync_job' in locals() and sync_job:
             sync_job.failed_device_count += 1
             sync_job.save()
+        if finalize_job and sync_job_id:
+            _finalize_sync_job(sync_job_id, has_error=True, result=[("error", str(e))])
         return [("error", str(e))]
+
+
+def _finalize_sync_job(sync_job_id, has_error, result):
+    """
+    Finalizes a SyncJob's status, end_time, and failed_device_count.
+    Called by _sync_device_logic when it is the sole owner of the job.
+    """
+    try:
+        from .models import SyncJob
+        from django.utils import timezone as tz
+        sync_job = SyncJob.objects.filter(id=sync_job_id).first()
+        if not sync_job or sync_job.status not in ('running', 'pending'):
+            return  # already finalized (e.g. by execute_bulk_sync_batch)
+
+        is_aborted = isinstance(result, list) and any(s == 'aborted' for s, _ in result)
+        is_error   = has_error and not is_aborted
+
+        if is_aborted:
+            sync_job.status = 'aborted'
+            for _, msg in result:
+                sync_job.summary_logs.append(f"[ABORTED] {msg}")
+        elif is_error:
+            sync_job.status = 'failed'
+            sync_job.failed_device_count = 1
+            for _, msg in result:
+                sync_job.summary_logs.append(f"[FAILED] {msg}")
+        else:
+            sync_job.status = 'completed'
+            sync_job.summary_logs.append("Device synced successfully.")
+
+        sync_job.end_time = tz.now()
+        sync_job.save()
+    except Exception as ex:
+        logger.error(f"_finalize_sync_job error for SyncJob {sync_job_id}: {ex}")
 
 
 @job('default')
@@ -220,7 +264,7 @@ def execute_bulk_sync_batch(device_ids, auto_update=False, max_concurrency=5, co
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         future_to_device = {
-            executor.submit(_sync_device_logic, dev_id, auto_update, connection_library, sync_job.id): dev_id
+            executor.submit(_sync_device_logic, dev_id, auto_update, connection_library, sync_job.id, False): dev_id
             for dev_id in device_ids
         }
 
