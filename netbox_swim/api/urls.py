@@ -4,7 +4,7 @@ from . import views
 
 router = NetBoxRouter()
 router.register('hardware-groups', views.HardwareGroupViewSet)
-router.register('images', views.SoftwareImageViewSet)
+router.register('software-images', views.SoftwareImageViewSet)
 router.register('file-servers', views.FileServerViewSet)
 router.register('golden-images', views.GoldenImageViewSet)
 router.register('compliance', views.DeviceComplianceViewSet)

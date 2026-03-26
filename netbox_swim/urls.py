@@ -64,6 +64,7 @@ urlpatterns = (
     # ---------------------------------------------------------
     path('compliance/dashboard/', views.ComplianceDashboardView.as_view(), name='compliance_dashboard'),
     path('compliance/', views.DeviceComplianceListView.as_view(), name='devicecompliance_list'),
+    path('compliance/add/', views.DeviceComplianceEditView.as_view(), name='devicecompliance_add'),
     path('compliance/<int:pk>/', views.DeviceComplianceView.as_view(), name='devicecompliance'),
     path('compliance/<int:pk>/edit/', views.DeviceComplianceEditView.as_view(), name='devicecompliance_edit'),
     path('compliance/<int:pk>/delete/', views.DeviceComplianceDeleteView.as_view(), name='devicecompliance_delete'),

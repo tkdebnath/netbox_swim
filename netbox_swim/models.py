@@ -152,10 +152,10 @@ class SoftwareImage(NetBoxModel):
     deployment_mode = models.CharField(max_length=20, choices=DeploymentModeChoices.choices, default=DeploymentModeChoices.UNIVERSAL)
     min_source_version = models.CharField(max_length=50, blank=True)
     max_source_version = models.CharField(max_length=50, blank=True)
-    file_size_bytes = models.BigIntegerField(null=True, blank=True)
-    hash_md5 = models.CharField(max_length=32, blank=True)
+    file_size_bytes = models.BigIntegerField(null=True, blank=False)
+    hash_md5 = models.CharField(max_length=32, blank=False)
     hash_sha256 = models.CharField(max_length=64, blank=True)
-    hash_sha512 = models.CharField(max_length=128, blank=True)
+    hash_sha512 = models.CharField(max_length=128, blank=False)
     release_notes_url = models.URLField(blank=True)
     min_ram_mb = models.IntegerField(null=True, blank=True)
     min_flash_mb = models.IntegerField(null=True, blank=True)
@@ -181,7 +181,10 @@ class GoldenImage(NetBoxModel):
 
     class Meta:
         ordering = ['device_type', 'hardware_group']
-        unique_together = (('device_type', 'deployment_mode'), ('hardware_group', 'deployment_mode'))
+        constraints = [
+            models.UniqueConstraint(fields=['device_type', 'deployment_mode'], name='unique_golden_device_type', condition=models.Q(device_type__isnull=False)),
+            models.UniqueConstraint(fields=['hardware_group', 'deployment_mode'], name='unique_golden_hw_group', condition=models.Q(hardware_group__isnull=False)),
+        ]
 
     def __str__(self):
         return f"Golden: {self.device_type or self.hardware_group} ({self.get_deployment_mode_display()})"

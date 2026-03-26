@@ -25,7 +25,7 @@ class FileServerViewSet(NetBoxModelViewSet):
 
 
 class GoldenImageViewSet(NetBoxModelViewSet):
-    queryset = models.GoldenImage.objects.prefetch_related('platform', 'image', 'tags')
+    queryset = models.GoldenImage.objects.prefetch_related('image', 'tags')
     serializer_class = serializers.GoldenImageSerializer
     filterset_class = filtersets.GoldenImageFilterSet
 
