@@ -469,10 +469,23 @@ class UpgradeJobView(generic.ObjectView):
         # ----- 5. File Server -----
         context['file_server'] = None
         context['download_url'] = None
+        from .models import FileServer
+        
+        candidates = []
         if target_image and getattr(target_image, 'file_server', None):
-            fs = target_image.file_server
+            candidates.append(target_image.file_server)
+            
+        resolved = FileServer.resolve_for_device(device)
+        for fs in resolved:
+            if fs.pk not in {c.pk for c in candidates}:
+                candidates.append(fs)
+                
+        if candidates and target_image:
+            fs = candidates[0]
             context['file_server'] = fs
-            context['download_url'] = f"{fs.protocol}://{fs.ip_address}/{fs.base_path}/{target_image.image_file_name}"
+            # Clean up double slashes gracefully just like the executor
+            base_path = f"{fs.base_path.strip('/')}/" if fs.base_path else ""
+            context['download_url'] = f"{fs.protocol}://{fs.ip_address}/{base_path}{target_image.image_file_name}"
 
         # ----- 6. Golden Image -----
         golden = None
@@ -484,6 +497,19 @@ class UpgradeJobView(generic.ObjectView):
 
         # ----- 7. Workflow Steps Sequence -----
         steps_detail = []
+        
+        # Inject System Pre-Flight Step 0 for execution lineage transparency
+        steps_detail.append({
+            'order': '0',
+            'name': 'Pre-Flight Device Sync',
+            'action_type': 'sync',
+            'primary_lib': conn_priority.split(',')[0] if conn_priority else 'auto',
+            'fallback_libs': ['System Guardrail'],
+            'predicted_class': 'engine._sync_device_logic',
+            'has_override': False,
+            'check_template': None,
+        })
+        
         if template:
             for step in template.steps.all().order_by('order'):
                 # Per-step connection override
