@@ -439,7 +439,7 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
                 slug = device.platform.slug if device.platform else 'cisco_ios'
 
                 hostname = None
-                response_prompt = conn.get_prompt()
+                response_prompt = conn.find_prompt()
                 if response_prompt:
                     hostname = response_prompt.replace("#", "").replace(">", "").strip()
 

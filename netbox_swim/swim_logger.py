@@ -112,12 +112,21 @@ def _build_swim_logger() -> logging.Logger:
                 file_handler.setFormatter(fmt)
                 logger.addHandler(file_handler)
         except OSError as e:
+            _correct_paths = (
+                "  Option A (persistent): /opt/netbox/swim.log\n"
+                "            → add to docker-compose: - /host/path/swim.log:/opt/netbox/swim.log\n"
+                "  Option B (ephemeral): /tmp/swim.log   ← note: /tmp not /temp\n"
+                "            → no volume mount needed, file lives in container only"
+            )
             print(
                 f"[SWIM] ERROR: Could not create log file '{log_path}': {type(e).__name__}: {e}\n"
+                f"[SWIM] Common cause: path typo (e.g. '/temp' should be '/tmp') or directory not writable.\n"
+                f"[SWIM] Suggested paths that work in Docker:\n{_correct_paths}\n"
                 f"[SWIM] Falling back to stderr-only logging.",
                 file=sys.stderr,
                 flush=True
             )
+
 
     logger.propagate = False
     return logger
