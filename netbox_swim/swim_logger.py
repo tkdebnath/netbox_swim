@@ -81,18 +81,31 @@ def _build_swim_logger() -> logging.Logger:
         import pathlib
         path = pathlib.Path(log_path)
         try:
-            # Create parent directories if they don't exist
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # Touch the file to create it if it doesn't exist yet
-            path.touch(exist_ok=True)
-            file_handler = logging.handlers.RotatingFileHandler(
-                filename=str(path),
-                maxBytes=10 * 1024 * 1024,  # 10 MB
-                backupCount=5,
-                encoding='utf-8'
-            )
-            file_handler.setFormatter(fmt)
-            logger.addHandler(file_handler)
+            # Guard: if Docker mounted an empty volume here it creates a directory
+            # instead of a file. Detect this early and explain exactly how to fix it.
+            if path.is_dir():
+                print(
+                    f"[SWIM] ERROR: '{log_path}' is a directory, not a file.\n"
+                    f"[SWIM] This is a Docker volume mount issue. Fix it on the host:\n"
+                    f"[SWIM]   touch {log_path}   # create the file first\n"
+                    f"[SWIM]   docker compose up -d netbox  # restart the container\n"
+                    f"[SWIM] Falling back to stderr-only logging.",
+                    file=sys.stderr,
+                    flush=True
+                )
+            else:
+                # Create parent directories if they don't exist
+                path.parent.mkdir(parents=True, exist_ok=True)
+                # Touch the file to create it if it doesn't exist yet
+                path.touch(exist_ok=True)
+                file_handler = logging.handlers.RotatingFileHandler(
+                    filename=str(path),
+                    maxBytes=10 * 1024 * 1024,  # 10 MB
+                    backupCount=5,
+                    encoding='utf-8'
+                )
+                file_handler.setFormatter(fmt)
+                logger.addHandler(file_handler)
         except OSError as e:
             # Print directly to stderr — visible in docker logs even if file logging fails
             print(
