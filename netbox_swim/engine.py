@@ -1,22 +1,9 @@
-import logging
 import os
 from django_rq import job
 from django.utils import timezone
 from .models import UpgradeJob, JobLog, WorkflowStep
+from .swim_logger import swim_log as logger
 
-logger = logging.getLogger('netbox_swim')
-logger.setLevel(logging.DEBUG)
-if not logger.handlers:
-    log_path = '/opt/netbox/netbox/media/swim_sync.log'
-    # Fallback for dev environments
-    if not os.path.exists('/opt/netbox/netbox/media/'):
-        log_path = '/tmp/swim_sync.log'
-    fh = logging.FileHandler(log_path)
-    fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(process)d - %(message)s')
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    
 logger.info("SWIM Engine initialized.")
 
 # ============================================================
@@ -51,7 +38,8 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
     except Device.DoesNotExist:
         logger.error(f"Device ID {device_id} not found.")
         return f"Device {device_id} not found."
-    
+
+    from .models import DeviceSyncRecord, SyncJob
     # 1. Determine which Sync Task to run based on Platform and Library preference
     from .tasks.sync.cisco import (
         SyncCiscoIosDeviceScrapli, 
@@ -59,38 +47,54 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
         SyncCiscoIosDeviceUnicon
     )
     
-    platform_slug = getattr(device.platform, 'slug', '')
-    logger.info(f"Target platform extracted as: {platform_slug}")
-    
+    platform_slug = getattr(device.platform, 'slug', '').lower()
+    platform_name = getattr(device.platform, 'name', '').lower()
+    logger.info(f"[{device.name}] Platform slug='{platform_slug}' name='{platform_name}' library='{connection_library}'")
+
     # User Request: Must have an explicit IPv4/IPv6 assigned.
     if not device.primary_ip:
-        logger.error(f"Device {device.name} lacks a Primary IP address. Sync aborted.")
-        return f"Device lacks a Primary IP address. Sync aborted."
+        msg = f"Device {device.name} has no Primary IP — sync aborted."
+        logger.error(msg)
+        DeviceSyncRecord.objects.create(
+            device=device,
+            sync_job=SyncJob.objects.filter(id=sync_job_id).first() if sync_job_id else None,
+            status='failed',
+            log_messages=[msg]
+        )
+        return [("error", msg)]
 
     task = None
-    
-    # Standardize the connection library format
-    if 'cisco' in platform_slug.lower() or platform_slug == 'cisco-ios-xe':
-        # Priority Logic: Use requested library if available, otherwise fallback in order: Scrapli > Netmiko > Unicon
-        if connection_library == 'scrapli':
-            task = SyncCiscoIosDeviceScrapli()
-        elif connection_library == 'netmiko':
+
+    # Match any Cisco platform slug or name (ios, nx-os, nxos, cisco, etc.)
+    CISCO_KEYWORDS = ('cisco', 'ios', 'nxos', 'nx-os', 'catalyst', 'nexus', 'asr', 'isr')
+    is_cisco = any(kw in platform_slug for kw in CISCO_KEYWORDS) or \
+               any(kw in platform_name for kw in CISCO_KEYWORDS)
+
+    if is_cisco:
+        if connection_library == 'netmiko':
             task = SyncCiscoIosDeviceNetmiko()
         elif connection_library == 'unicon':
             task = SyncCiscoIosDeviceUnicon()
-        
-        # Absolute Fallback if choice was invalid
-        if not task:
-            task = SyncCiscoIosDeviceScrapli()
-    
+        else:
+            task = SyncCiscoIosDeviceScrapli()  # default
+
     if task is None:
-        # Fallback or unsupported
-        logger.error(f"No sync strategy found for platform {platform_slug}")
-        return f"No sync strategy found for platform {platform_slug}"
+        msg = (
+            f"No sync strategy for platform slug='{platform_slug}'. "
+            f"Supported keywords: {CISCO_KEYWORDS}. "
+            f"Check the Platform slug on this device in NetBox."
+        )
+        logger.error(f"[{device.name}] {msg}")
+        DeviceSyncRecord.objects.create(
+            device=device,
+            sync_job=SyncJob.objects.filter(id=sync_job_id).first() if sync_job_id else None,
+            status='failed',
+            log_messages=[msg]
+        )
+        return [("error", msg)]
         
     # 2. Execute the Sync Task
     try:
-        from .models import DeviceSyncRecord
         import uuid
         
         # Get the job ID from the current RQ task context if available
