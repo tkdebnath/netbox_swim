@@ -635,6 +635,28 @@ class UpgradeJobDownloadFragmentView(generic.ObjectView):
                     header += f"Timestamp: {log.timestamp}\n"
                     header += f"{'=' * 60}\n\n"
                     zf.writestr(entry_name, header + (log.log_output or 'No output recorded.'))
+
+            # Third step: Always bundle the complete execution timeline log!
+            if has_content:
+                db_logs_full = models.JobLog.objects.filter(job=job).order_by('timestamp')
+                content = []
+                content.append(f"EXECUTION LOGS FOR UPGRADE JOB: {job.id}")
+                content.append(f"Device: {getattr(job.device, 'name', 'Unknown')}")
+                content.append(f"Start Time: {job.start_time}")
+                content.append(f"Status: {job.status.upper()}")
+                content.append(f"{'='*50}\n")
+
+                for l in db_logs_full:
+                    status_flag = "[SUCCESS]" if l.is_success else "[FAILED]" if l.is_success is False else "[INFO]"
+                    ts_str = l.timestamp.strftime('%Y-%m-%d %H:%M:%S') if l.timestamp else '0000-00-00 00:00:00'
+                    content.append(f"[{ts_str}] {status_flag} STEP: {l.action_type}")
+                    if l.log_output:
+                        content.append(f"{'-'*40}\n{l.log_output.strip()}\n{'-'*40}\n")
+                    else:
+                        content.append("")
+                        
+                device_name = getattr(job.device, 'name', f"device_{job.id}")
+                zf.writestr(f"{device_name}_execution_logs.txt", '\n'.join(content))
         
         if not has_content:
             from django.contrib import messages
