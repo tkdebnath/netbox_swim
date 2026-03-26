@@ -264,47 +264,41 @@ class ComplianceDashboardTable(tables.Table):
         orderable = True
 
 
-class GoldenImageAssignmentTable(tables.Table):
+class GoldenImageAssignmentTable(NetBoxTable):
     """
-    Shows every DeviceType with its currently assigned golden image.
-    Rows are dicts, not model instances.
+    Uses the built-in DeviceType model directly.
+    Golden image info is injected via lookup dicts passed to __init__.
     """
-    pk = tables.CheckBoxColumn(accessor='device_type_pk', attrs={
-        'td__input': {'name': 'pk', 'value': tables.A('device_type_pk')},
-    })
-    manufacturer = tables.Column(accessor='manufacturer', verbose_name='Manufacturer', orderable=True)
-    device_type = tables.TemplateColumn(
-        template_code='<a href="{{ record.device_type_url }}">{{ record.device_type_name }}</a>',
-        verbose_name='Device Type',
-        orderable=True,
-    )
-    device_count = tables.Column(accessor='device_count', verbose_name='Devices', orderable=True)
-    golden_image = tables.TemplateColumn(
-        template_code='''
-            {% if record.golden_image_name %}
-            <a href="{{ record.golden_image_url }}">{{ record.golden_image_name }}</a>
-            {% else %}
-            <span class="badge text-bg-warning">Not Assigned</span>
-            {% endif %}
-        ''',
-        verbose_name='Golden Image',
-        orderable=True,
-    )
-    golden_version = tables.TemplateColumn(
-        template_code='''
-            {% if record.golden_version %}
-            <code>{{ record.golden_version }}</code>
-            {% else %}
-            <span class="text-muted">—</span>
-            {% endif %}
-        ''',
-        verbose_name='Golden Version',
-        orderable=True,
-    )
-    deployment_mode = tables.Column(accessor='deployment_mode', verbose_name='Mode', orderable=True)
+    pk = tables.CheckBoxColumn()
+    manufacturer = tables.Column(accessor='manufacturer', linkify=True)
+    model = tables.Column(linkify=True, verbose_name='Device Type')
+    golden_image = tables.Column(empty_values=(), verbose_name='Golden Image', orderable=False)
+    golden_version = tables.Column(empty_values=(), verbose_name='Golden Version', orderable=False)
 
-    class Meta:
-        attrs = {'class': 'table table-hover object-list'}
-        row_attrs = {'class': 'object-row'}
-        orderable = True
+    class Meta(NetBoxTable.Meta):
+        from dcim.models import DeviceType as DT
+        model = DT
+        fields = ('pk', 'manufacturer', 'model', 'golden_image', 'golden_version')
+        default_columns = ('pk', 'manufacturer', 'model', 'golden_image', 'golden_version')
+
+    def __init__(self, *args, golden_map=None, golden_map_urls=None, golden_versions=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.golden_map = golden_map or {}
+        self.golden_map_urls = golden_map_urls or {}
+        self.golden_versions = golden_versions or {}
+
+    def render_golden_image(self, record):
+        from django.utils.html import format_html
+        name = self.golden_map.get(record.pk)
+        if name:
+            url = self.golden_map_urls.get(record.pk, '#')
+            return format_html('<a href="{}">{}</a>', url, name)
+        return format_html('<span class="badge text-bg-warning">Not Assigned</span>')
+
+    def render_golden_version(self, record):
+        from django.utils.html import format_html
+        version = self.golden_versions.get(record.pk)
+        if version:
+            return format_html('<code>{}</code>', version)
+        return format_html('<span class="text-muted">—</span>')
 

@@ -1237,43 +1237,39 @@ class GoldenImageAssignmentView(PermissionRequiredMixin, View):
         from dcim.models import DeviceType
         from django_tables2 import RequestConfig
 
-        # Build golden image lookup: device_type_pk → golden image
-        golden_map = {}  # dt_pk → GoldenImage
+        # Build golden image lookups: device_type_pk → display string / url / version
+        golden_map = {}       # pk → image name
+        golden_map_urls = {}  # pk → golden image url
+        golden_versions = {}  # pk → version string
         for gi in models.GoldenImage.objects.prefetch_related('device_types').select_related('image'):
             for dt in gi.device_types.all():
-                golden_map[dt.pk] = gi
+                golden_map[dt.pk] = str(gi.image)
+                golden_map_urls[dt.pk] = gi.get_absolute_url()
+                golden_versions[dt.pk] = gi.image.version
 
-        # Build rows for every DeviceType
+        # Use DeviceType queryset directly
         device_types = DeviceType.objects.select_related('manufacturer').order_by('manufacturer__name', 'model')
-        rows = []
-        for dt in device_types:
-            gi = golden_map.get(dt.pk)
-            rows.append({
-                'device_type_pk': dt.pk,
-                'manufacturer': str(dt.manufacturer),
-                'device_type_name': str(dt),
-                'device_type_url': dt.get_absolute_url(),
-                'device_count': Device.objects.filter(device_type=dt).count(),
-                'golden_image_name': str(gi.image) if gi else '',
-                'golden_image_url': gi.get_absolute_url() if gi else '',
-                'golden_version': gi.image.version if gi else '',
-                'deployment_mode': gi.get_deployment_mode_display() if gi else '',
-            })
 
-        table = tables.GoldenImageAssignmentTable(rows)
+        table = tables.GoldenImageAssignmentTable(
+            device_types,
+            golden_map=golden_map,
+            golden_map_urls=golden_map_urls,
+            golden_versions=golden_versions,
+        )
         RequestConfig(request, paginate={'per_page': 50}).configure(table)
 
         # Golden images for the bulk-assign dropdown
         golden_images = models.GoldenImage.objects.select_related('image').all()
-        software_images = models.SoftwareImage.objects.order_by('image_name')
+
+        total = device_types.count()
+        assigned = len(golden_map)
 
         return render(request, 'netbox_swim/golden_image_assignment.html', {
             'table': table,
             'golden_images': golden_images,
-            'software_images': software_images,
-            'total_device_types': len(rows),
-            'assigned_count': sum(1 for r in rows if r['golden_image_name']),
-            'unassigned_count': sum(1 for r in rows if not r['golden_image_name']),
+            'total_device_types': total,
+            'assigned_count': assigned,
+            'unassigned_count': total - assigned,
         })
 
     def post(self, request):
