@@ -136,6 +136,31 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
         
         return Response(response_data)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        API Endpoint: Cancel a pending, scheduled, or running Upgrade Job.
+        Usage: POST /api/plugins/swim/upgrade-jobs/<pk>/cancel/
+        """
+        from django.utils import timezone
+        job = self.get_object()
+        
+        if job.status in ['pending', 'scheduled', 'running']:
+            job.status = 'cancelled'
+            job.end_time = timezone.now()
+            
+            if not isinstance(job.job_log, list):
+                job.job_log = []
+            job.job_log.append({
+                "time": timezone.now().isoformat(),
+                "level": "warning",
+                "message": "Job cancelled via REST API request."
+            })
+            job.save()
+            return Response({"status": "cancelled", "message": f"Upgrade Job {job.pk} manually cancelled."})
+        else:
+            return Response({"error": f"Cannot cancel job in state: {job.status}"}, status=400)
+
     @action(detail=True, methods=['get'])
     def download_checks(self, request, pk=None):
         """
