@@ -288,13 +288,15 @@ class ValidationCheck(NetBoxModel):
     category = models.CharField(max_length=20, choices=CategoryChoices.choices, default=CategoryChoices.GENIE)
     command = models.CharField(max_length=255, help_text="e.g. 'bgp', 'ospf', or 'show ip int brief'")
     
-    # Is it meant specifically for Pre, Post, or Both?
     class PhaseChoices(models.TextChoices):
         PRE = 'pre', 'Pre-Check Only'
         POST = 'post', 'Post-Check Only'
         BOTH = 'both', 'Both Pre & Post'
     phase = models.CharField(max_length=10, choices=PhaseChoices.choices, default=PhaseChoices.BOTH)
     
+    class Meta:
+        ordering = ['name']
+
     def __str__(self):
         return f"{self.name} [{self.get_category_display()}]"
 
@@ -310,6 +312,9 @@ class CheckTemplate(NetBoxModel):
     description = models.TextField(blank=True)
     checks = models.ManyToManyField(ValidationCheck, related_name='templates')
 
+    class Meta:
+        ordering = ['name']
+
     def __str__(self):
         return self.name
 
@@ -321,6 +326,9 @@ class WorkflowTemplate(NetBoxModel):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
 
     def __str__(self):
         return self.name
@@ -377,6 +385,9 @@ class UpgradeJob(NetBoxModel):
     end_time = models.DateTimeField(null=True, blank=True)
     job_log = models.JSONField(default=list, blank=True)
     extra_config = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created']
 
     def __str__(self):
         return f"Upgrade {self.device} -> {self.target_image.version if self.target_image else '?'}"
