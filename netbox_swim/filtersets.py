@@ -285,24 +285,6 @@ class SyncJobFilterSet(NetBoxModelFilterSet):
         fields = ('id', 'status', 'connection_library')
 
 
-class ValidationCheckFilterSet(NetBoxModelFilterSet):
-    category = django_filters.CharFilter(lookup_expr='iexact')
-    phase = django_filters.CharFilter(lookup_expr='iexact')
-
-    class Meta:
-        from .models import ValidationCheck
-        model = ValidationCheck
-        fields = ('id', 'name', 'category', 'phase')
-
-
-class CheckTemplateFilterSet(NetBoxModelFilterSet):
-
-    class Meta:
-        from .models import CheckTemplate
-        model = CheckTemplate
-        fields = ('id', 'name')
-
-
 class ComplianceDashboardFilterSet(django_filters.FilterSet):
     """
     Filters Device objects for the Compliance Dashboard.

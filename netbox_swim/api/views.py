@@ -44,12 +44,10 @@ class WorkflowTemplateViewSet(NetBoxModelViewSet):
 class ValidationCheckViewSet(NetBoxModelViewSet):
     queryset = models.ValidationCheck.objects.prefetch_related('tags')
     serializer_class = serializers.ValidationCheckSerializer
-    filterset_class = filtersets.ValidationCheckFilterSet
 
 class CheckTemplateViewSet(NetBoxModelViewSet):
     queryset = models.CheckTemplate.objects.prefetch_related('checks', 'tags')
     serializer_class = serializers.CheckTemplateSerializer
-    filterset_class = filtersets.CheckTemplateFilterSet
 
 
 class WorkflowStepViewSet(NetBoxModelViewSet):
@@ -302,7 +300,6 @@ class JobLogViewSet(NetBoxModelViewSet):
 class SyncJobViewSet(NetBoxModelViewSet):
     queryset = models.SyncJob.objects.prefetch_related('device_records', 'tags')
     serializer_class = serializers.SyncJobSerializer
-    filterset_class = filtersets.SyncJobFilterSet
 
 
 class DeviceSyncRecordViewSet(NetBoxModelViewSet):
