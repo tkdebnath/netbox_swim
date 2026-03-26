@@ -157,6 +157,17 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
                 "message": "Job cancelled via REST API request."
             })
             job.save()
+            
+            try:
+                if isinstance(job.extra_config, dict):
+                    rq_job_id = job.extra_config.get('rq_job_id')
+                    if rq_job_id:
+                        import django_rq
+                        from rq.command import send_stop_job_command
+                        send_stop_job_command(django_rq.get_connection(), rq_job_id)
+            except Exception:
+                pass
+                
             return Response({"status": "cancelled", "message": f"Upgrade Job {job.pk} manually cancelled."})
         else:
             return Response({"error": f"Cannot cancel job in state: {job.status}"}, status=400)

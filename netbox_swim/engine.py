@@ -636,6 +636,18 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
 
     upgrade.status = 'running'
     upgrade.start_time = timezone.now()
+    
+    # Store the actual RQ Job ID to allow hard-killer requests
+    try:
+        from rq import get_current_job
+        current_job = get_current_job()
+        if current_job:
+            if not isinstance(upgrade.extra_config, dict):
+                upgrade.extra_config = {}
+            upgrade.extra_config['rq_job_id'] = current_job.id
+    except Exception:
+        pass
+        
     upgrade.save()
 
     device = upgrade.device

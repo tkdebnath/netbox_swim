@@ -865,11 +865,21 @@ class UpgradeJobCancelView(generic.ObjectEditView):
                 "message": "Job cancelled by user request."
             })
             obj.save()
+            
+            # Formally attempt to rip down running processes/connections by sending 
+            # the stop signal directly to the RQ Worker via Redis thread
+            try:
+                if isinstance(obj.extra_config, dict):
+                    rq_job_id = obj.extra_config.get('rq_job_id')
+                    if rq_job_id:
+                        import django_rq
+                        from rq.command import send_stop_job_command
+                        send_stop_job_command(django_rq.get_connection(), rq_job_id)
+            except Exception:
+                pass
+                
             messages.warning(request, f"Upgrade Job {obj.pk} manually cancelled.")
         return redirect('plugins:netbox_swim:upgradejob', pk=obj.pk)
-
-    def post(self, request, *args, **kwargs):
-        return self.get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         return self.get(request, *args, **kwargs)
