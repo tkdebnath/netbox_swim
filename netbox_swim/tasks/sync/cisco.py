@@ -373,144 +373,153 @@ class CiscoSyncLogicMixin:
 
 class SyncCiscoIosDeviceScrapli(ScrapliTask, CiscoSyncLogicMixin):
     """Sync an IOS-XE device globally through Scrapli."""
-    
-    def execute(self, device, target_image=None, auto_update=False):
-        with self.connect(device) as conn:
-            slug = getattr(device.platform, 'slug', 'cisco_ios')
-            
-            # Finding actual hostname from prompt
-            hostname = None
-            response_prompt = conn.get_prompt()
-            if response_prompt:
-                hostname = response_prompt.replace("#", "").replace(">", "").strip()
-            
-            # --- 1. Base show version Execution ---
-            response_ver = conn.send_command("show version")
-            parser_ver = CiscoShowVersionParser(raw_string=response_ver.result, platform_slug=slug)
-            golden_schema = parser_ver.get_facts()
-            
-            # Override Hostname from Prompt execution (Highest Priority!)
-            if hostname:
-                golden_schema['hostname'] = hostname
-            
-            # --- 2. Show Inventory Execution ---
-            response_inv = conn.send_command("show inventory")
-            parser_inv = CiscoShowInventoryParser(raw_string=response_inv.result, platform_slug=slug)
-            for k, v in parser_inv.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # --- 3. TACACS Execution ---
-            response_run = conn.send_command("show running-config")
-            response_interface = conn.send_command("show interface")
-            
-            # Extract IP from NetBox object
-            fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
-            tacacs_dict = {
-                'run': response_run.result,
-                'interface': response_interface.result,
-                'fallback_ip': fallback_ip
-            }
-            
-            parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
-            for k, v in parser_tacacs.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # 4. Hand-off combined schema execution to the checking system
-            return self._process_cisco_ios_facts(device, golden_schema, auto_update, response_ver.result if hasattr(response_ver, 'result') else str(response_ver), parser_ver)
 
+    def execute(self, device, target_image=None, auto_update=False):
+        host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        try:
+            with self.connect(device) as conn:
+                slug = getattr(device.platform, 'slug', 'cisco_ios')
+
+                hostname = None
+                response_prompt = conn.get_prompt()
+                if response_prompt:
+                    hostname = response_prompt.replace("#", "").replace(">", "").strip()
+
+                response_ver = conn.send_command("show version")
+                parser_ver = CiscoShowVersionParser(raw_string=response_ver.result, platform_slug=slug)
+                golden_schema = parser_ver.get_facts()
+
+                if hostname:
+                    golden_schema['hostname'] = hostname
+
+                response_inv = conn.send_command("show inventory")
+                parser_inv = CiscoShowInventoryParser(raw_string=response_inv.result, platform_slug=slug)
+                for k, v in parser_inv.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                response_run = conn.send_command("show running-config")
+                response_interface = conn.send_command("show interface")
+
+                fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
+                tacacs_dict = {
+                    'run': response_run.result,
+                    'interface': response_interface.result,
+                    'fallback_ip': fallback_ip
+                }
+
+                parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
+                for k, v in parser_tacacs.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                return self._process_cisco_ios_facts(
+                    device, golden_schema, auto_update,
+                    response_ver.result if hasattr(response_ver, 'result') else str(response_ver),
+                    parser_ver
+                )
+        except Exception as e:
+            msg = (
+                f"[Scrapli] Connection to {device.name} ({host}:22) FAILED: "
+                f"{type(e).__name__}: {e}"
+            )
+            return [("error", msg)]
 
 
 class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
     """Sync logic explicitly for Netmiko."""
-    
+
     def execute(self, device, target_image=None, auto_update=False):
-        with self.connect(device) as conn:
-            slug = device.platform.slug if device.platform else 'cisco_ios'
-            
-            # Finding actual hostname from prompt
-            hostname = None
-            response_prompt = conn.get_prompt()
-            if response_prompt:
-                hostname = response_prompt.replace("#", "").replace(">", "").strip()
-            
-            # --- 1. Base show version Execution ---
-            response_ver = conn.send_command("show version")
-            parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
-            golden_schema = parser_ver.get_facts()
-            
-            # Override Hostname from Prompt execution (Highest Priority!)
-            if hostname:
-                golden_schema['hostname'] = hostname
-            
-            # --- 2. Show Inventory Execution ---
-            response_inv = conn.send_command("show inventory")
-            parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
-            for k, v in parser_inv.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # --- 3. TACACS Execution ---
-            response_run = conn.send_command("show running-config")
-            response_interface = conn.send_command("show interface")
-            
-            # Extract IP from NetBox object
-            fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
-            tacacs_dict = {
-                'run': response_run,
-                'interface': response_interface,
-                'fallback_ip': fallback_ip
-            }
-            
-            parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
-            for k, v in parser_tacacs.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # 4. Hand-off combined schema execution to the checking system
-            return self._process_cisco_ios_facts(device, golden_schema, auto_update, str(response_ver), parser_ver)
+        host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        try:
+            with self.connect(device) as conn:
+                slug = device.platform.slug if device.platform else 'cisco_ios'
+
+                hostname = None
+                response_prompt = conn.get_prompt()
+                if response_prompt:
+                    hostname = response_prompt.replace("#", "").replace(">", "").strip()
+
+                response_ver = conn.send_command("show version")
+                parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
+                golden_schema = parser_ver.get_facts()
+
+                if hostname:
+                    golden_schema['hostname'] = hostname
+
+                response_inv = conn.send_command("show inventory")
+                parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
+                for k, v in parser_inv.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                response_run = conn.send_command("show running-config")
+                response_interface = conn.send_command("show interface")
+
+                fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
+                tacacs_dict = {
+                    'run': response_run,
+                    'interface': response_interface,
+                    'fallback_ip': fallback_ip
+                }
+
+                parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
+                for k, v in parser_tacacs.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                return self._process_cisco_ios_facts(
+                    device, golden_schema, auto_update, str(response_ver), parser_ver
+                )
+        except Exception as e:
+            msg = (
+                f"[Netmiko] Connection to {device.name} ({host}:22) FAILED: "
+                f"{type(e).__name__}: {e}"
+            )
+            return [("error", msg)]
 
 
 class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
     """Sync logic explicitly for Unicon."""
-    
+
     def execute(self, device, target_image=None, auto_update=False):
-        with self.connect(device, log_stdout=True, learn_hostname=True) as conn:
-            slug = device.platform.slug if device.platform else 'cisco_ios'
-            
-            # Finding actual hostname from prompt
-            hostname = None
-            if device.learned_hostname:
-                hostname = device.learned_hostname
-            
-            # --- 1. Base show version Execution ---
-            response_ver = conn.execute("show version")
-            parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
-            golden_schema = parser_ver.get_facts()
-            
-            # Override Hostname from Prompt execution (Highest Priority!)
-            if hostname:
-                golden_schema['hostname'] = hostname
-            
-            # --- 2. Show Inventory Execution ---
-            response_inv = conn.execute("show inventory")
-            parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
-            for k, v in parser_inv.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # --- 3. TACACS Execution ---
-            response_run = conn.execute("show running-config")
-            response_interface = conn.execute("show interface")
-            
-            # Extract IP from NetBox object
-            fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
-            tacacs_dict = {
-                'run': response_run,
-                'interface': response_interface,
-                'fallback_ip': fallback_ip
-            }
-            
-            parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
-            for k, v in parser_tacacs.get_facts().items():
-                if v: golden_schema[k] = v
-            
-            # 4. Hand-off combined schema execution to the checking system
-            return self._process_cisco_ios_facts(device, golden_schema, auto_update, str(response_ver), parser_ver)
-            
+        host = str(device.primary_ip.address.ip) if device.primary_ip else 'unknown'
+        try:
+            with self.connect(device, log_stdout=True, learn_hostname=True) as conn:
+                slug = device.platform.slug if device.platform else 'cisco_ios'
+
+                hostname = None
+                if hasattr(device, 'learned_hostname') and device.learned_hostname:
+                    hostname = device.learned_hostname
+
+                response_ver = conn.execute("show version")
+                parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
+                golden_schema = parser_ver.get_facts()
+
+                if hostname:
+                    golden_schema['hostname'] = hostname
+
+                response_inv = conn.execute("show inventory")
+                parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
+                for k, v in parser_inv.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                response_run = conn.execute("show running-config")
+                response_interface = conn.execute("show interface")
+
+                fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
+                tacacs_dict = {
+                    'run': response_run,
+                    'interface': response_interface,
+                    'fallback_ip': fallback_ip
+                }
+
+                parser_tacacs = CiscoShowTacacsParser(raw_string=tacacs_dict, platform_slug=slug)
+                for k, v in parser_tacacs.get_facts().items():
+                    if v: golden_schema[k] = v
+
+                return self._process_cisco_ios_facts(
+                    device, golden_schema, auto_update, str(response_ver), parser_ver
+                )
+        except Exception as e:
+            msg = (
+                f"[Unicon] Connection to {device.name} ({host}:22) FAILED: "
+                f"{type(e).__name__}: {e}"
+            )
+            return [("error", msg)]
