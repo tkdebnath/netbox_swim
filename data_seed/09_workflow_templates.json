@@ -1,0 +1,26 @@
+{
+  "_endpoint": "/api/plugins/swim/workflow-templates/",
+  "_description": "Step 9: Create Workflow Templates (upgrade lifecycle definitions)",
+  "data": [
+    {
+      "name": "Standard Campus Upgrade",
+      "description": "Full upgrade lifecycle for campus switches: pre-check → distribute → activate → wait → ping → post-check → verify → report",
+      "is_active": true
+    },
+    {
+      "name": "SD-WAN Edge Upgrade",
+      "description": "SD-WAN aware upgrade flow with extended wait timers for control-plane reconvergence",
+      "is_active": true
+    },
+    {
+      "name": "Data Center Rolling Upgrade",
+      "description": "Spine/Leaf upgrade template with readiness evaluation and verification gates",
+      "is_active": true
+    },
+    {
+      "name": "Emergency Hotfix (No Checks)",
+      "description": "Minimal flow: distribute → activate. No pre/post checks. Use for critical CVE patching only.",
+      "is_active": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_endpoint": "/api/plugins/swim/check-templates/",
+  "_description": "Step 8: Create Check Templates that group multiple Validation Checks. Requires: validation-checks from step 07. NOTE: 'checks' field expects list of ValidationCheck IDs.",
+  "data": [
+    {
+      "name": "Campus L3 Full Check",
+      "description": "Comprehensive pre/post check template for Layer-3 campus switches. Includes routing, adjacency, NTP, and resource validation.",
+      "checks": ["__ID_BGP_NEIGHBORS__", "__ID_OSPF_NEIGHBORS__", "__ID_INTERFACE_SUMMARY__", "__ID_ROUTING_TABLE__", "__ID_CDP_NEIGHBORS__", "__ID_NTP_STATUS__", "__ID_PLATFORM_RESOURCES__", "__ID_FLASH_FILESYSTEM__", "__ID_INSTALL_SUMMARY__", "__ID_HSRP_STATUS__", "__ID_SPANNING_TREE__"]
+    },
+    {
+      "name": "Campus L2 Quick Check",
+      "description": "Lightweight check template for access-layer switches. Focuses on interface state, CDP, and STP.",
+      "checks": ["__ID_INTERFACE_SUMMARY__", "__ID_CDP_NEIGHBORS__", "__ID_SPANNING_TREE__", "__ID_FLASH_FILESYSTEM__", "__ID_INSTALL_SUMMARY__"]
+    },
+    {
+      "name": "Data Center Spine Check",
+      "description": "DC spine-specific checks including BGP underlay validation.",
+      "checks": ["__ID_BGP_NEIGHBORS__", "__ID_INTERFACE_SUMMARY__", "__ID_ROUTING_TABLE__", "__ID_PLATFORM_RESOURCES__", "__ID_NTP_STATUS__"]
+    },
+    {
+      "name": "SD-WAN Edge Check",
+      "description": "SD-WAN edge router checks focusing on overlay and underlay health.",
+      "checks": ["__ID_BGP_NEIGHBORS__", "__ID_INTERFACE_SUMMARY__", "__ID_ROUTING_TABLE__", "__ID_NTP_STATUS__", "__ID_PLATFORM_RESOURCES__", "__ID_FLASH_FILESYSTEM__", "__ID_INSTALL_SUMMARY__"]
+    }
+  ],
+  "_note": "Replace __ID_*__ placeholders with actual ValidationCheck IDs returned from step 07. Example: if 'BGP Neighbors' was created with id=1, replace __ID_BGP_NEIGHBORS__ with 1."
+}

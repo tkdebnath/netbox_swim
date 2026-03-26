@@ -1,0 +1,36 @@
+{
+  "_endpoint": "/api/dcim/device-roles/",
+  "_description": "Step 4: Create Device Roles",
+  "data": [
+    {
+      "name": "Campus Core",
+      "slug": "campus-core",
+      "color": "4caf50"
+    },
+    {
+      "name": "Campus Access",
+      "slug": "campus-access",
+      "color": "2196f3"
+    },
+    {
+      "name": "SD-WAN Edge",
+      "slug": "sdwan-edge",
+      "color": "9c27b0"
+    },
+    {
+      "name": "Data Center Spine",
+      "slug": "dc-spine",
+      "color": "ff9800"
+    },
+    {
+      "name": "Data Center Leaf",
+      "slug": "dc-leaf",
+      "color": "ff5722"
+    },
+    {
+      "name": "WAN Router",
+      "slug": "wan-router",
+      "color": "607d8b"
+    }
+  ]
+}

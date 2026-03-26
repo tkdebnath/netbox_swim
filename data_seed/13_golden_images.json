@@ -1,0 +1,34 @@
+{
+  "_endpoint": "/api/plugins/swim/golden-images/",
+  "_description": "Step 13: Create Golden Image designations (compliance baselines). Requires: software-images from step 12, hardware-groups from step 11.",
+  "data": [
+    {
+      "image": "__IMAGE_ID_C9300_CAMPUS__",
+      "deployment_mode": "campus",
+      "description": "Golden standard for all campus core C9300 switches — 17.09.05",
+      "_note_hardware_groups": "PATCH to add campus-core-c9300 hardware group after creation",
+      "_note_device_types": "PATCH to add c9300-48p, c9300-24p device types after creation"
+    },
+    {
+      "image": "__IMAGE_ID_C9200_CAMPUS__",
+      "deployment_mode": "campus",
+      "description": "Golden standard for campus access C9200 switches — 17.09.05",
+      "_note_hardware_groups": "PATCH to add campus-access-c9200 hardware group after creation",
+      "_note_device_types": "PATCH to add c9200-48p device type after creation"
+    },
+    {
+      "image": "__IMAGE_ID_SDWAN__",
+      "deployment_mode": "sdwan",
+      "description": "Golden standard for SD-WAN edge fleet — 17.09.05",
+      "_note_hardware_groups": "PATCH to add sdwan-edge-fleet hardware group after creation"
+    },
+    {
+      "image": "__IMAGE_ID_NXOS__",
+      "deployment_mode": "campus",
+      "description": "Golden standard for Nexus 9000 data center switches — 10.3(2)F",
+      "_note_hardware_groups": "PATCH to add dc-nexus-spine-leaf hardware group after creation",
+      "_note_device_types": "PATCH to add n9k-fx3 device type after creation"
+    }
+  ],
+  "_note": "Replace __IMAGE_ID_*__ with actual SoftwareImage IDs from step 12. After creation, PATCH to add hardware_groups and device_types M2M relationships."
+}

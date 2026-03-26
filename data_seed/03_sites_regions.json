@@ -1,0 +1,39 @@
+{
+  "_description": "Step 3: Create Regions and Sites",
+  "_region_endpoint": "/api/dcim/regions/",
+  "regions": [
+    {
+      "name": "US-West",
+      "slug": "us-west"
+    },
+    {
+      "name": "US-East",
+      "slug": "us-east"
+    },
+    {
+      "name": "APAC",
+      "slug": "apac"
+    }
+  ],
+  "_site_endpoint": "/api/dcim/sites/",
+  "sites": [
+    {
+      "name": "San Jose HQ",
+      "slug": "san-jose-hq",
+      "status": "active",
+      "region": {"slug": "us-west"}
+    },
+    {
+      "name": "New York DC",
+      "slug": "new-york-dc",
+      "status": "active",
+      "region": {"slug": "us-east"}
+    },
+    {
+      "name": "Singapore Lab",
+      "slug": "singapore-lab",
+      "status": "active",
+      "region": {"slug": "apac"}
+    }
+  ]
+}

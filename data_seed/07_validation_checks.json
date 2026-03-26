@@ -1,0 +1,90 @@
+{
+  "_endpoint": "/api/plugins/swim/validation-checks/",
+  "_description": "Step 7: Create individual Validation Checks (Genie features and CLI commands)",
+  "data": [
+    {
+      "name": "BGP Neighbors",
+      "description": "Validate BGP neighbor adjacency state before and after upgrade",
+      "category": "genie",
+      "command": "bgp",
+      "phase": "both"
+    },
+    {
+      "name": "OSPF Neighbors",
+      "description": "Validate OSPF neighbor adjacency and area membership",
+      "category": "genie",
+      "command": "ospf",
+      "phase": "both"
+    },
+    {
+      "name": "Interface Summary",
+      "description": "Capture interface status (up/down), IP, and error counters",
+      "category": "command",
+      "command": "show ip interface brief",
+      "phase": "both"
+    },
+    {
+      "name": "Routing Table",
+      "description": "Snapshot of all IP routes for drift detection",
+      "category": "command",
+      "command": "show ip route",
+      "phase": "both"
+    },
+    {
+      "name": "CDP Neighbors",
+      "description": "Capture CDP neighbor table for topology validation",
+      "category": "command",
+      "command": "show cdp neighbors",
+      "phase": "both"
+    },
+    {
+      "name": "NTP Status",
+      "description": "Verify NTP synchronization state",
+      "category": "command",
+      "command": "show ntp associations",
+      "phase": "both"
+    },
+    {
+      "name": "Platform Resources",
+      "description": "Check CPU and memory utilization before upgrade proceeds",
+      "category": "command",
+      "command": "show platform resources",
+      "phase": "pre"
+    },
+    {
+      "name": "Flash Filesystem",
+      "description": "Verify available flash space before image transfer",
+      "category": "command",
+      "command": "dir flash:",
+      "phase": "pre"
+    },
+    {
+      "name": "Install Summary",
+      "description": "Post-upgrade install summary to confirm committed packages",
+      "category": "command",
+      "command": "show install summary",
+      "phase": "post"
+    },
+    {
+      "name": "Stack Members",
+      "description": "Validate all stack members are online after reload",
+      "category": "command",
+      "command": "show switch",
+      "phase": "post"
+    },
+    {
+      "name": "HSRP Status",
+      "description": "Validate HSRP state and priority post-upgrade",
+      "category": "genie",
+      "command": "hsrp",
+      "phase": "both"
+    },
+    {
+      "name": "Spanning Tree",
+      "description": "Capture STP root bridge and port states",
+      "category": "command",
+      "command": "show spanning-tree summary",
+      "phase": "both"
+    }
+  ]
+}

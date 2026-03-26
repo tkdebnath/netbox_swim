@@ -1,0 +1,54 @@
+{
+  "_endpoint": "/api/plugins/swim/file-servers/",
+  "_description": "Step 6: Create File Servers for image distribution. Requires: sites, regions from step 03.",
+  "data": [
+    {
+      "name": "SJ-HTTP-SRV",
+      "protocol": "http",
+      "ip_address": "192.168.29.73",
+      "port": 80,
+      "base_path": "",
+      "username": "",
+      "password": "",
+      "priority": 10,
+      "is_global_default": false,
+      "description": "Primary HTTP file server at San Jose for campus image distribution"
+    },
+    {
+      "name": "SJ-TFTP-SRV",
+      "protocol": "tftp",
+      "ip_address": "10.1.1.50",
+      "port": 69,
+      "base_path": "/tftpboot",
+      "username": "",
+      "password": "",
+      "priority": 20,
+      "is_global_default": false,
+      "description": "TFTP fallback server at San Jose"
+    },
+    {
+      "name": "Global-HTTPS-Repo",
+      "protocol": "https",
+      "ip_address": "repo.enterprise.com",
+      "port": 443,
+      "base_path": "/firmware/images",
+      "username": "svc_swim",
+      "password": "changeme",
+      "priority": 100,
+      "is_global_default": true,
+      "description": "Global HTTPS repository for all regions (last-resort fallback)"
+    },
+    {
+      "name": "NY-SCP-SRV",
+      "protocol": "scp",
+      "ip_address": "10.2.1.100",
+      "port": 22,
+      "base_path": "/opt/images",
+      "username": "scpuser",
+      "password": "scppass",
+      "priority": 10,
+      "is_global_default": false,
+      "description": "SCP server for New York Data Center"
+    }
+  ]
+}

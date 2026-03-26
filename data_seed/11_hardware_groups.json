@@ -1,0 +1,59 @@
+{
+  "_endpoint": "/api/plugins/swim/hardware-groups/",
+  "_description": "Step 11: Create Hardware Groups for fleet segmentation. Requires: platforms, device-types from steps 01-02, workflow-templates from step 09.",
+  "data": [
+    {
+      "name": "Campus Core C9300",
+      "slug": "campus-core-c9300",
+      "description": "All Catalyst 9300 series switches in campus core role",
+      "deployment_mode": "campus",
+      "is_static": false,
+      "connection_priority": "scrapli,netmiko,unicon",
+      "min_version": "",
+      "max_version": "",
+      "workflow_template": "__TEMPLATE_ID_CAMPUS__",
+      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
+      "_note_device_types": "Add device type IDs for c9300-48p, c9300-24p after creation"
+    },
+    {
+      "name": "Campus Access C9200",
+      "slug": "campus-access-c9200",
+      "description": "Catalyst 9200 series access layer switches",
+      "deployment_mode": "campus",
+      "is_static": false,
+      "connection_priority": "netmiko,scrapli,unicon",
+      "min_version": "",
+      "max_version": "",
+      "workflow_template": "__TEMPLATE_ID_CAMPUS__",
+      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
+      "_note_device_types": "Add device type IDs for c9200-48p after creation"
+    },
+    {
+      "name": "SD-WAN Edge Fleet",
+      "slug": "sdwan-edge-fleet",
+      "description": "All SD-WAN enabled edge routers and switches",
+      "deployment_mode": "sdwan",
+      "is_static": false,
+      "connection_priority": "unicon,netmiko,scrapli",
+      "min_version": "",
+      "max_version": "",
+      "workflow_template": "__TEMPLATE_ID_SDWAN__",
+      "_note_platforms": "Add platform IDs for cisco-ios-xe after creation",
+      "_note_device_types": "Add device type IDs for c9300-48p after creation"
+    },
+    {
+      "name": "DC Nexus Spine-Leaf",
+      "slug": "dc-nexus-spine-leaf",
+      "description": "Nexus 9000 series data center spine and leaf switches",
+      "deployment_mode": "campus",
+      "is_static": false,
+      "connection_priority": "unicon,netmiko",
+      "min_version": "",
+      "max_version": "",
+      "workflow_template": "__TEMPLATE_ID_DC__",
+      "_note_platforms": "Add platform IDs for cisco-nx-os after creation",
+      "_note_device_types": "Add device type IDs for n9k-fx3 after creation"
+    }
+  ],
+  "_note": "Replace __TEMPLATE_ID_*__ with actual WorkflowTemplate IDs. After creating groups, use PATCH to add M2M relationships (platforms, device_types)."
+}

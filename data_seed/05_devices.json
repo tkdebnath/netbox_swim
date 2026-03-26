@@ -1,0 +1,97 @@
+{
+  "_endpoint": "/api/dcim/devices/",
+  "_description": "Step 5: Create Network Devices. Requires: manufacturers, platforms, device-types, sites, roles from steps 01-04.",
+  "data": [
+    {
+      "name": "SJ-CORE-SW01",
+      "device_type": {"slug": "c9300-48p"},
+      "role": {"slug": "campus-core"},
+      "site": {"slug": "san-jose-hq"},
+      "platform": {"slug": "cisco-ios-xe"},
+      "status": "active",
+      "serial": "FCW2301A001",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "17.06.05"
+      }
+    },
+    {
+      "name": "SJ-CORE-SW02",
+      "device_type": {"slug": "c9300-24p"},
+      "role": {"slug": "campus-core"},
+      "site": {"slug": "san-jose-hq"},
+      "platform": {"slug": "cisco-ios-xe"},
+      "status": "active",
+      "serial": "FCW2301A002",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "17.06.05"
+      }
+    },
+    {
+      "name": "SJ-ACCESS-SW01",
+      "device_type": {"slug": "c9200-48p"},
+      "role": {"slug": "campus-access"},
+      "site": {"slug": "san-jose-hq"},
+      "platform": {"slug": "cisco-ios-xe"},
+      "status": "active",
+      "serial": "FCW2305B010",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "17.03.06"
+      }
+    },
+    {
+      "name": "SJ-SDWAN-EDGE01",
+      "device_type": {"slug": "c9300-48p"},
+      "role": {"slug": "sdwan-edge"},
+      "site": {"slug": "san-jose-hq"},
+      "platform": {"slug": "cisco-ios-xe"},
+      "status": "active",
+      "serial": "FCW2301C003",
+      "custom_fields": {
+        "deployment_mode": "sdwan",
+        "software_version": "17.03.01"
+      }
+    },
+    {
+      "name": "NY-SPINE-01",
+      "device_type": {"slug": "n9k-fx3"},
+      "role": {"slug": "dc-spine"},
+      "site": {"slug": "new-york-dc"},
+      "platform": {"slug": "cisco-nx-os"},
+      "status": "active",
+      "serial": "SAL2340N001",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "10.2(3)"
+      }
+    },
+    {
+      "name": "NY-LEAF-01",
+      "device_type": {"slug": "n9k-fx3"},
+      "role": {"slug": "dc-leaf"},
+      "site": {"slug": "new-york-dc"},
+      "platform": {"slug": "cisco-nx-os"},
+      "status": "active",
+      "serial": "SAL2340N002",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "10.2(3)"
+      }
+    },
+    {
+      "name": "SG-WAN-RTR01",
+      "device_type": {"slug": "asr-1001x"},
+      "role": {"slug": "wan-router"},
+      "site": {"slug": "singapore-lab"},
+      "platform": {"slug": "cisco-ios-xr"},
+      "status": "active",
+      "serial": "FXS2401W001",
+      "custom_fields": {
+        "deployment_mode": "campus",
+        "software_version": "17.09.01"
+      }
+    }
+  ]
+}

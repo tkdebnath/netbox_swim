@@ -1,0 +1,39 @@
+{
+  "_endpoint": "/api/plugins/swim/workflow-steps/",
+  "_description": "Step 10: Create Workflow Steps for each template. Requires: workflow-templates from step 09. Replace __TEMPLATE_ID_*__ with actual IDs.",
+  "data": [
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 10, "action_type": "readiness", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 20, "action_type": "precheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 30, "action_type": "distribution", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 40, "action_type": "activation", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 50, "action_type": "wait", "extra_config": {"duration": 300}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 60, "action_type": "ping", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 70, "action_type": "postcheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 80, "action_type": "verification", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_CAMPUS__", "order": 90, "action_type": "report", "extra_config": {}},
+
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 10, "action_type": "readiness", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 20, "action_type": "precheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 30, "action_type": "distribution", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 40, "action_type": "activation", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 50, "action_type": "wait", "extra_config": {"duration": 600}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 60, "action_type": "ping", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 70, "action_type": "postcheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 80, "action_type": "verification", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_SDWAN__", "order": 90, "action_type": "report", "extra_config": {}},
+
+    {"template": "__TEMPLATE_ID_DC__", "order": 10, "action_type": "readiness", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 20, "action_type": "precheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 30, "action_type": "distribution", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 40, "action_type": "activation", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 50, "action_type": "wait", "extra_config": {"duration": 180}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 60, "action_type": "ping", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 70, "action_type": "postcheck", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 80, "action_type": "verification", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_DC__", "order": 90, "action_type": "report", "extra_config": {}},
+
+    {"template": "__TEMPLATE_ID_HOTFIX__", "order": 10, "action_type": "distribution", "extra_config": {}},
+    {"template": "__TEMPLATE_ID_HOTFIX__", "order": 20, "action_type": "activation", "extra_config": {}}
+  ],
+  "_note": "Replace __TEMPLATE_ID_CAMPUS__ etc. with the actual WorkflowTemplate IDs from step 09."
+}

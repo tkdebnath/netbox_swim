@@ -1,0 +1,46 @@
+{
+  "_endpoint": "/api/dcim/manufacturers/",
+  "_description": "Step 1: Create Manufacturers and Platforms (NetBox core prerequisites)",
+  "manufacturers": [
+    {
+      "name": "Cisco",
+      "slug": "cisco"
+    },
+    {
+      "name": "Palo Alto Networks",
+      "slug": "palo-alto-networks"
+    },
+    {
+      "name": "Juniper",
+      "slug": "juniper"
+    }
+  ],
+  "_platform_endpoint": "/api/dcim/platforms/",
+  "platforms": [
+    {
+      "name": "Cisco IOS-XE",
+      "slug": "cisco-ios-xe",
+      "manufacturer": {"slug": "cisco"}
+    },
+    {
+      "name": "Cisco IOS",
+      "slug": "cisco-ios",
+      "manufacturer": {"slug": "cisco"}
+    },
+    {
+      "name": "Cisco NX-OS",
+      "slug": "cisco-nx-os",
+      "manufacturer": {"slug": "cisco"}
+    },
+    {
+      "name": "Cisco IOS-XR",
+      "slug": "cisco-ios-xr",
+      "manufacturer": {"slug": "cisco"}
+    },
+    {
+      "name": "PAN-OS",
+      "slug": "panos",
+      "manufacturer": {"slug": "palo-alto-networks"}
+    }
+  ]
+}
