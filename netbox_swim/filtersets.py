@@ -21,7 +21,7 @@ class FileServerFilterSet(NetBoxModelFilterSet):
 
     class Meta:
         model = FileServer
-        fields = ('id', 'name', 'protocol', 'ip_address', 'base_path')
+        fields = ('id', 'name', 'protocol', 'ip_address', 'base_path', 'priority', 'is_global_default')
 
 
 class SoftwareImageFilterSet(NetBoxModelFilterSet):

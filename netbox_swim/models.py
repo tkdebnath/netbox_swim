@@ -123,16 +123,75 @@ class FileServer(NetBoxModel):
     regions = models.ManyToManyField('dcim.Region', blank=True, related_name='swim_file_servers')
     sites = models.ManyToManyField('dcim.Site', blank=True, related_name='swim_file_servers')
     devices = models.ManyToManyField('dcim.Device', blank=True, related_name='swim_file_servers')
+    priority = models.PositiveIntegerField(
+        default=100,
+        help_text="Lower number = higher preference. Used to order candidates when multiple file servers match."
+    )
+    is_global_default = models.BooleanField(
+        default=False,
+        help_text="If true, this server is used as a last-resort fallback when no regional match is found."
+    )
     description = models.TextField(blank=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['priority', 'name']
 
     def __str__(self):
         return f"{self.name} ({self.get_protocol_display()})"
 
     def get_absolute_url(self):
         return reverse('plugins:netbox_swim:fileserver', args=[self.pk])
+
+    @classmethod
+    def resolve_for_device(cls, device, protocol_filter=None):
+        """
+        Return an ordered list of FileServers for a device, using 4-tier
+        resolution (most specific first):
+
+          1. Device-specific  (device in fs.devices M2M)
+          2. Site-match       (device.site in fs.sites M2M)
+          3. Region-match     (device.site.region in fs.regions M2M)
+          4. Global default   (is_global_default=True)
+
+        Within each tier, servers are sorted by `priority` (ascending).
+        Duplicates are removed while preserving order.
+
+        Args:
+            device:          dcim.Device instance
+            protocol_filter: Optional protocol string (e.g. 'http') to
+                             restrict candidates.
+        Returns:
+            list[FileServer] — ordered candidates, best-match first.
+        """
+        base_qs = cls.objects.all()
+        if protocol_filter:
+            base_qs = base_qs.filter(protocol__iexact=protocol_filter)
+
+        seen = set()
+        result = []
+
+        def _add(qs):
+            for fs in qs.order_by('priority', 'name'):
+                if fs.pk not in seen:
+                    seen.add(fs.pk)
+                    result.append(fs)
+
+        # Tier 1: device-specific
+        _add(base_qs.filter(devices=device))
+
+        # Tier 2: site
+        if getattr(device, 'site', None):
+            _add(base_qs.filter(sites=device.site))
+
+        # Tier 3: region
+        if getattr(device, 'site', None) and getattr(device.site, 'region', None):
+            _add(base_qs.filter(regions=device.site.region))
+
+        # Tier 4: global default
+        _add(base_qs.filter(is_global_default=True))
+
+        return result
+
 
 
 class SoftwareImage(NetBoxModel):

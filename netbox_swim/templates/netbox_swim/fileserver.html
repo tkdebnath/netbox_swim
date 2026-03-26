@@ -32,6 +32,20 @@
                         <th scope="row">Base path</th>
                         <td><code>{{ object.base_path|default:"/" }}</code></td>
                     </tr>
+                    <tr>
+                        <th scope="row">Priority</th>
+                        <td>{{ object.priority }} <span class="text-muted">(lower = preferred)</span></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Global Default</th>
+                        <td>
+                            {% if object.is_global_default %}
+                                <span class="badge text-bg-success">Yes</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">No</span>
+                            {% endif %}
+                        </td>
+                    </tr>
                 </table>
             </div>
         </div>

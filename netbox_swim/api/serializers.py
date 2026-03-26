@@ -30,6 +30,7 @@ class FileServerSerializer(NetBoxModelSerializer):
         fields = (
             'id', 'display', 'name', 'protocol', 'ip_address', 'port',
             'username', 'password', 'base_path', 'regions', 'sites', 'devices',
+            'priority', 'is_global_default',
             'description', 'tags', 'custom_fields', 'created', 'last_updated',
         )
 

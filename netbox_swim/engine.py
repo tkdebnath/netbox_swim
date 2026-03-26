@@ -515,13 +515,25 @@ def generate_pipeline_plan(job_id):
     tacacs_source = swim_config.get('tacacs_source_interface', 'Not Specified in Config Context')
     mgmt_vrf = swim_config.get('mgmt_vrf', 'Not Specified in Config Context')
     
-    # File Server Logic
-    fs_info = "None Assigned"
-    dl_link = "N/A"
+    # File Server Logic — show resolved fallback chain
+    from .models import FileServer
+    candidates = []
     if target_image.file_server:
-        fs = target_image.file_server
-        fs_info = fs.name
-        dl_link = f"{fs.protocol}://{fs.username}:***@{fs.ip_address}/{fs.base_path}/{target_image.image_file_name}"
+        candidates.append(target_image.file_server)
+    resolved = FileServer.resolve_for_device(device)
+    for rfs in resolved:
+        if rfs.pk not in {c.pk for c in candidates}:
+            candidates.append(rfs)
+
+    if candidates:
+        fs_chain = " → ".join(f"{fs.name} ({fs.ip_address}, pri={fs.priority})" for fs in candidates)
+        fs_info = f"{candidates[0].name} (primary)"
+        dl_link = (f"{candidates[0].protocol}://{candidates[0].username}:***@"
+                   f"{candidates[0].ip_address}/{candidates[0].base_path}/{target_image.image_file_name}")
+    else:
+        fs_chain = "None — no file server matched"
+        fs_info = "None Assigned"
+        dl_link = "N/A"
 
     plan = []
     plan.append(f"====== PIPELINE DRY RUN ======")
@@ -530,6 +542,7 @@ def generate_pipeline_plan(job_id):
     plan.append(f"Matching Hardware Group: {hw_group_name}")
     plan.append(f"Target Image: {target_image.image_name}")
     plan.append(f"File Server: {fs_info}")
+    plan.append(f"Fallback Chain: {fs_chain}")
     plan.append(f"Download Link: {dl_link}")
     plan.append(f"Mgmt VRF: {mgmt_vrf}")
     plan.append(f"TACACS Source Int: {tacacs_source}\n")

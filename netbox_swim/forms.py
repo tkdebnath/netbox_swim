@@ -70,7 +70,8 @@ class FileServerForm(NetBoxModelForm):
         model = models.FileServer
         fields = (
             'name', 'protocol', 'ip_address', 'port', 'username', 'password',
-            'base_path', 'regions', 'sites', 'devices', 'description', 'tags',
+            'base_path', 'regions', 'sites', 'devices',
+            'priority', 'is_global_default', 'description', 'tags',
         )
 
 

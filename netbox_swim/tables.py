@@ -24,11 +24,12 @@ class HardwareGroupTable(NetBoxTable):
 class FileServerTable(NetBoxTable):
     name = tables.Column(linkify=True)
     protocol = ChoiceFieldColumn()
+    is_global_default = BooleanColumn()
 
     class Meta(NetBoxTable.Meta):
         model = FileServer
-        fields = ('pk', 'id', 'name', 'protocol', 'ip_address', 'base_path', 'actions')
-        default_columns = ('name', 'protocol', 'ip_address', 'base_path')
+        fields = ('pk', 'id', 'name', 'protocol', 'ip_address', 'base_path', 'priority', 'is_global_default', 'actions')
+        default_columns = ('name', 'protocol', 'ip_address', 'base_path', 'priority', 'is_global_default')
 
 
 class SoftwareImageTable(NetBoxTable):

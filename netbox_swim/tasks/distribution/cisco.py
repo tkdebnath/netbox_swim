@@ -112,46 +112,37 @@ class CiscoDistributeUnicon(UniconTask):
                      f"Currently supported: IOS, IOS-XE only. "
                      f"Device '{device.name}' upgrade aborted at distribution stage.")]
         
-        # --- File Server validation ---
-        fs = target_image.file_server
-        if not fs:
-            return [("FAIL", f"Target image '{target_image.image_name}' is not assigned to a File Server. "
-                     f"Assign a File Server to this Software Image before running distribution.")]
+        # --- Resolve file server candidates (with fallback chain) ---
+        from ...models import FileServer
         
-        # --- Protocol dispatch ---
-        protocol = fs.protocol.lower() if fs.protocol else 'http'
-        if protocol not in self.SUPPORTED_PROTOCOLS:
-            return [("FAIL", f"Protocol '{protocol}' is not yet implemented for distribution. "
-                     f"Currently supported: {', '.join(sorted(self.SUPPORTED_PROTOCOLS)).upper()}. "
-                     f"Update File Server '{fs.name}' or use a supported protocol.")]
+        candidates = []
+        # Explicit FK on image is always first candidate (backward-compatible)
+        if target_image.file_server:
+            candidates.append(target_image.file_server)
         
-        # --- Build copy command via dispatch ---
+        # Append regional/hierarchy candidates from resolver
+        resolved = FileServer.resolve_for_device(device)
+        for fs in resolved:
+            if fs.pk not in {c.pk for c in candidates}:
+                candidates.append(fs)
+        
+        if not candidates:
+            return [("FAIL", f"No file server found for device '{device.name}'. "
+                     f"Either assign a File Server to the Software Image, "
+                     f"or configure regional/default file servers with matching hierarchy.")]
+        
+        # --- Pre-compute reusable values ---
         boot_drive = self._get_boot_drive(device, target_image)
         file_name = target_image.image_file_name
         dest_path = f"{boot_drive}{file_name}"
-        
-        cmd, error = self._get_copy_command(protocol, fs, file_name, dest_path)
-        if error:
-            return [("FAIL", error)]
-        
         expected_size = getattr(target_image, 'file_size_bytes', None)
         expected_md5 = getattr(target_image, 'hash_md5', None) or ""
         
         tacacs_intf = (device.custom_field_data.get('tacacs_interface') 
                        or device.custom_field_data.get('tacacs_source_interface'))
         
-        # --- Connect and execute ---
+        # --- Connect once, try each server ---
         with self.connect(device, connection_timeout=300) as pyats_device:
-            
-            # Configure HTTP client source interface (VRF routing)
-            if tacacs_intf and protocol in ('http', 'https'):
-                try:
-                    pyats_device.configure(
-                        f"ip http client source-interface {tacacs_intf}", timeout=30
-                    )
-                except Exception as e:
-                    return [("FAIL", f"Failed to set HTTP client source-interface "
-                             f"'{tacacs_intf}': {str(e)}")]
             
             # 1. Pre-check: skip transfer if file already exists with correct size + MD5
             if expected_size:
@@ -201,50 +192,88 @@ class CiscoDistributeUnicon(UniconTask):
                     action=None, loop_continue=False
                 ),
             ])
-            
-            # 3. File transfer with retry (max 2 attempts)
-            max_attempts = 2
-            success = False
-            last_err = ""
-            
-            try:
-                pyats_device.default.log_stdout = False
-            except Exception:
-                pass
 
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    result = pyats_device.execute(cmd, timeout=7200, reply=dialog)
-                    if 'bytes copied' in result.lower() or 'OK' in result:
-                        success = True
-                        break
-                    else:
-                        last_err = f"Attempt {attempt} output: {result[-500:]}"
-                except Exception as e:
-                    last_err = f"Attempt {attempt} exception: {str(e)}"
-                    if attempt < max_attempts:
-                        import time
-                        time.sleep(10)  # Let device recover before retry
-                    
-            try:
-                pyats_device.default.log_stdout = True
-            except Exception:
-                pass
+            # 3. Try each file server candidate in order
+            all_errors = []
+            for fs_idx, fs in enumerate(candidates, start=1):
+                fs_label = f"{fs.name} ({fs.ip_address})"
                 
-            if not success:
-                return [("FAIL", f"File transfer failed after {max_attempts} attempts. "
-                         f"Last error: {last_err}")]
-                    
-            # 4. Post-transfer MD5 verification
-            if expected_md5:
+                # --- Protocol check for this server ---
+                protocol = fs.protocol.lower() if fs.protocol else 'http'
+                if protocol not in self.SUPPORTED_PROTOCOLS:
+                    all_errors.append(f"[{fs_label}] Protocol '{protocol}' not supported, skipping.")
+                    continue
+                
+                # --- Build copy command ---
+                cmd, error = self._get_copy_command(protocol, fs, file_name, dest_path)
+                if error:
+                    all_errors.append(f"[{fs_label}] {error}")
+                    continue
+                
+                # --- Configure HTTP client source interface (VRF routing) ---
+                if tacacs_intf and protocol in ('http', 'https'):
+                    try:
+                        pyats_device.configure(
+                            f"ip http client source-interface {tacacs_intf}", timeout=30
+                        )
+                    except Exception as e:
+                        all_errors.append(f"[{fs_label}] Failed to set HTTP source-interface: {str(e)}")
+                        continue
+                
+                # --- File transfer with retry (max 2 attempts per server) ---
+                max_attempts = 2
+                success = False
+                last_err = ""
+                
                 try:
-                    verify_out = pyats_device.execute(
-                        f"verify /md5 {dest_path} {expected_md5}", timeout=600
-                    )
-                    if "Verified" not in verify_out:
-                        return [("FAIL", f"Post-download MD5 verification FAILED for "
-                                 f"'{file_name}'. Output: {verify_out}")]
-                except Exception as e:
-                    return [("FAIL", f"MD5 verification command failed: {str(e)}")]
+                    pyats_device.default.log_stdout = False
+                except Exception:
+                    pass
+
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        result = pyats_device.execute(cmd, timeout=7200, reply=dialog)
+                        if 'bytes copied' in result.lower() or 'OK' in result:
+                            success = True
+                            break
+                        else:
+                            last_err = f"Attempt {attempt} output: {result[-500:]}"
+                    except Exception as e:
+                        last_err = f"Attempt {attempt} exception: {str(e)}"
+                        if attempt < max_attempts:
+                            import time
+                            time.sleep(10)
+                        
+                try:
+                    pyats_device.default.log_stdout = True
+                except Exception:
+                    pass
+                
+                if success:
+                    # 4. Post-transfer MD5 verification
+                    if expected_md5:
+                        try:
+                            verify_out = pyats_device.execute(
+                                f"verify /md5 {dest_path} {expected_md5}", timeout=600
+                            )
+                            if "Verified" not in verify_out:
+                                return [("FAIL", f"Post-download MD5 verification FAILED for "
+                                         f"'{file_name}'. Output: {verify_out}")]
+                        except Exception as e:
+                            return [("FAIL", f"MD5 verification command failed: {str(e)}")]
+                    
+                    fallback_note = ""
+                    if fs_idx > 1:
+                        fallback_note = f" (fallback #{fs_idx}, tried {fs_idx - 1} server(s) first)"
+                    return [("PASS", f"Successfully distributed '{file_name}' to {boot_drive} "
+                             f"via {fs_label}{fallback_note}")]
+                else:
+                    all_errors.append(f"[{fs_label}] Transfer failed: {last_err}")
+                    logger.warning(f"Distribution: File server {fs_label} failed for "
+                                   f"device {device.name}, trying next candidate...")
             
-            return [("PASS", f"Successfully distributed '{file_name}' to {boot_drive}")]
+            # All candidates exhausted
+            error_summary = "\n".join(all_errors)
+            return [("FAIL", f"Distribution failed — exhausted all {len(candidates)} file server(s).\n"
+                     f"Errors:\n{error_summary}")]
+
