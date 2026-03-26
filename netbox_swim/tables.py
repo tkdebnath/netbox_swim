@@ -24,7 +24,7 @@ class HardwareGroupTable(NetBoxTable):
 class FileServerTable(NetBoxTable):
     name = tables.Column(linkify=True)
     protocol = ChoiceFieldColumn()
-    is_global_default = BooleanColumn()
+    is_global_default = tables.BooleanColumn()
 
     class Meta(NetBoxTable.Meta):
         model = FileServer
