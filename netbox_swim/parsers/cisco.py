@@ -9,8 +9,11 @@ class CiscoShowVersionParser(BaseCommandParser):
     def _initialize_schema(self):
         # Schema expected by CiscoSyncLogicMixin
         return {
+            'manufacturer': None,
+            'platform': None,
             'hostname': None,
             'hardware': None,
+            'part_number': None,
             'version': None,
             'serial': None
         }
@@ -40,6 +43,8 @@ class CiscoShowVersionParser(BaseCommandParser):
                     self.structured_facts['version'] = textfsm_data.get('os')
                 if not self.structured_facts['hardware']:
                     self.structured_facts['hardware'] = textfsm_data.get('platform')
+                if not self.structured_facts['part_number'] and self.structured_facts['hardware']:
+                    self.structured_facts['part_number'] = self.structured_facts['hardware']
                 if not self.structured_facts['serial']:
                     serial = textfsm_data.get('serial')
                     self.structured_facts['serial'] = serial[0] if isinstance(serial, list) else serial
@@ -51,6 +56,11 @@ class CiscoShowVersionParser(BaseCommandParser):
                 if not self.structured_facts['serial']:
                     serial = textfsm_data.get('serial', [])
                     self.structured_facts['serial'] = serial[0] if isinstance(serial, list) and len(serial) > 0 else (serial if not isinstance(serial, list) else None)
+                if not self.structured_facts['platform'] and self.structured_facts['hardware'] and textfsm_data.get('rommon'):
+                    self.structured_facts['platform'] = f"Cisco {textfsm_data.get('rommon')}"
+                if not self.structured_facts['manufacturer'] and self.structured_facts['platform']:
+                    self.structured_facts['manufacturer'] = "Cisco"
+                    
         # 2. Genie fallback for fields TextFSM missed
         if genie_data:
             # IOS vs NXOS keys are different in Genie
@@ -67,6 +77,11 @@ class CiscoShowVersionParser(BaseCommandParser):
                 if not self.structured_facts['serial']:
                     self.structured_facts['serial'] = genie_data.get("platform", {}).get("hardware", {}).get("chassis_sn")
 
+                if not self.structured_facts['platform'] and genie_data.get("platform", {}).get("os", {}) == 'NX-OS':
+                    self.structured_facts['platform'] = 'Cisco NX-OS'
+                    if not self.structured_facts['manufacturer'] or self.structured_facts['manufacturer'] != 'Cisco':
+                        self.structured_facts['manufacturer'] = 'Cisco'
+
             if self.genie_platform in ['ios', 'iosxe']:
                 if not self.structured_facts['hostname']:
                     self.structured_facts['hostname'] = genie_data.get("version", {}).get("hostname")
@@ -82,6 +97,11 @@ class CiscoShowVersionParser(BaseCommandParser):
 
                 if not self.structured_facts['serial']:
                     self.structured_facts['serial'] = genie_data.get("version", {}).get("chassis_sn")
+                
+                if not self.structured_facts['platform'] and genie_data.get("version", {}).get("os", {}):
+                    self.structured_facts['platform'] = f"Cisco {genie_data.get("version", {}).get("os", {})}"
+                    if not self.structured_facts['manufacturer'] or self.structured_facts['manufacturer'] != 'Cisco':
+                        self.structured_facts['manufacturer'] = 'Cisco'
 
         return self.structured_facts
 
@@ -91,7 +111,8 @@ class CiscoShowInventoryParser(BaseCommandParser):
     def _initialize_schema(self):
         return {
             'hardware': None,
-            'serial': None
+            'serial': None,
+            'part_number': None   # Chassis PID (e.g. C9300-48P) — maps to DeviceType.part_number
         }
     
     def get_facts(self):
@@ -120,24 +141,28 @@ class CiscoShowInventoryParser(BaseCommandParser):
                     if item.get('name') == "Chassis":
                         self.structured_facts['hardware'] = item.get('pid')
                         self.structured_facts['serial'] = item.get('sn')
+                        self.structured_facts['part_number'] = item.get('pid')
                         break
 
             elif self.textfsm_platform in ['cisco_ios', 'cisco_iosxe']:
                 for item in textfsm_data:
-                    # 'name' could be 'Chassis' or '"Chassis"' or empty
                     name = str(item.get('name', '')).strip().strip('"').lower()
                     if name == "chassis" or "chassis" in name:
                         if not self.structured_facts['hardware']:
                             self.structured_facts['hardware'] = item.get('pid')
                         if not self.structured_facts['serial']:
                             self.structured_facts['serial'] = item.get('sn')
+                        if not self.structured_facts['part_number']:
+                            self.structured_facts['part_number'] = item.get('pid')
                         break
                 
-                # If "Chassis" was not found (e.g., switches might just list "1" or "Stack"), grab the first item's PID/SN
+                # If "Chassis" was not found, grab the first item's PID/SN
                 if not self.structured_facts['hardware'] and len(textfsm_data) > 0:
                     self.structured_facts['hardware'] = textfsm_data[0].get('pid')
                 if not self.structured_facts['serial'] and len(textfsm_data) > 0:
                     self.structured_facts['serial'] = textfsm_data[0].get('sn')
+                if not self.structured_facts['part_number'] and len(textfsm_data) > 0:
+                    self.structured_facts['part_number'] = textfsm_data[0].get('pid')
 
         return self.structured_facts
 

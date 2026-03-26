@@ -408,11 +408,46 @@ class DeviceSyncRecord(NetBoxModel):
             self.device.serial = self.detected_diff['serial']['new']
         if 'model' in self.detected_diff:
             from dcim.models import DeviceType
-            try:
-                new_dt = DeviceType.objects.get(model=self.detected_diff['model']['new'])
+            target_model = self.detected_diff['model']['new']
+            new_dt = (
+                DeviceType.objects.filter(model=target_model).first()
+                or DeviceType.objects.filter(model__iexact=target_model).first()
+                or DeviceType.objects.filter(model__icontains=target_model.split('-')[0]).first()
+            )
+            if new_dt:
                 self.device.device_type = new_dt
-            except DeviceType.DoesNotExist:
-                pass
+        if 'part_number' in self.detected_diff:
+            from dcim.models import DeviceType
+            target_pn = self.detected_diff['part_number']['new']
+            matched_dt = (
+                DeviceType.objects.filter(part_number=target_pn).first()
+                or DeviceType.objects.filter(part_number__iexact=target_pn).first()
+                or DeviceType.objects.filter(part_number__icontains=target_pn.split('-')[0]).first()
+            )
+            if matched_dt and 'model' not in self.detected_diff:
+                # Only update device_type from part_number if model didn't already change it
+                self.device.device_type = matched_dt
+        if 'platform' in self.detected_diff:
+            from dcim.models import Platform
+            target_platform = self.detected_diff['platform']['new']
+            new_platform = (
+                Platform.objects.filter(name=target_platform).first()
+                or Platform.objects.filter(name__iexact=target_platform).first()
+                or Platform.objects.filter(slug__icontains=target_platform.lower().split()[0]).first()
+            )
+            if new_platform:
+                self.device.platform = new_platform
+        if 'platform_manufacturer' in self.detected_diff and self.device.platform:
+            from dcim.models import Manufacturer
+            mfr_name = self.detected_diff['platform_manufacturer']['new']
+            mfr = (
+                Manufacturer.objects.filter(name=mfr_name).first()
+                or Manufacturer.objects.filter(name__iexact=mfr_name).first()
+                or Manufacturer.objects.filter(slug__iexact=mfr_name.lower()).first()
+            )
+            if mfr and not self.device.platform.manufacturer:
+                self.device.platform.manufacturer = mfr
+                self.device.platform.save(update_fields=['manufacturer'])
         for cf_key in ['software_version', 'tacacs_source_interface', 'tacacs_source_ip', 'vrf']:
             if cf_key in self.detected_diff:
                 self.device.custom_field_data[cf_key] = self.detected_diff[cf_key]['new']

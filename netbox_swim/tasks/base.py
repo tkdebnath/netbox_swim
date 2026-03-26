@@ -1,40 +1,38 @@
 from contextlib import contextmanager
+from .swim_logger import SwimSessionLogger, swim_log
+
 
 class UpgradeTask:
     """Base atomic task for any upgrade action."""
     def execute(self, device, target_image):
         """
-        Execute the task. 
+        Execute the task.
         Must return a list of tuples: [('pass', 'Message'), ('fail', 'Error')]
         """
         raise NotImplementedError
 
     def _get_credentials(self, device):
         """
-        Extracts credentials cleanly from NetBox config contexts or OS environments,
-        abstracting this logic away from specific connection libraries.
+        Extracts credentials cleanly from NetBox config contexts or OS environments.
         Returns: host, username, password, secret, platform_slug
         """
         import os
         config_context = device.get_config_context()
         swim_config = config_context.get('swim', {})
         cred_profile = swim_config.get('credential_profile')
-        
+
         if cred_profile:
-            # If NetBox dictates a specific profile, we pull that key from the OS
             username = os.environ.get(f"{cred_profile.upper()}_USERNAME", "")
             password = os.environ.get(f"{cred_profile.upper()}_PASSWORD", "")
             secret = os.environ.get(f"{cred_profile.upper()}_SECRET", "")
         else:
-            # Fallback to general environment variables if no profile is defined
             username = os.environ.get('SWIM_USERNAME', '')
             password = os.environ.get('SWIM_PASSWORD', '')
             secret = os.environ.get('SWIM_SECRET', '')
-            
-        # We no longer fall back to device.name. 
+
         host = str(device.primary_ip.address.ip) if device.primary_ip else ''
         platform_slug = getattr(device.platform, 'slug', '')
-        
+
         return host, username, password, secret, platform_slug
 
     def _get_boot_drive(self, device, target_image=None):
@@ -44,12 +42,10 @@ class UpgradeTask:
         2. Checks the assigned HardwareGroup extra_config
         3. Falls back to model string heuristics
         """
-        # Config Context override (highest precedence)
         ctx = device.get_config_context()
         if 'swim_boot_drive' in ctx:
             return ctx['swim_boot_drive']
 
-        # 2. Hardware Group Override
         if target_image:
             hw_group = getattr(target_image, 'hardware_groups', None)
             if hw_group and hw_group.exists():
@@ -57,38 +53,75 @@ class UpgradeTask:
                 if isinstance(grp.extra_config, dict) and 'swim_boot_drive' in grp.extra_config:
                     return grp.extra_config['swim_boot_drive']
 
-        # 3. Regex fallback based on OS + Model hardware
         model = getattr(getattr(device, 'device_type', None), 'model', '').upper()
         platform_slug = getattr(getattr(device, 'platform', None), 'slug', '').lower()
-        
+
         if 'nxos' in platform_slug or 'nx-os' in platform_slug:
-            # Nexus always defaults to bootflash:
             return "bootflash:"
-            
+
         if 'ios-xe' in platform_slug or 'ios' in platform_slug:
-            # Only exact modern IOS-XE chassis like Cat9k / ASR / CSR default to bootflash:
             if any(x in model for x in ['9500', '9600', '9400', 'ASR', 'CSR']):
                 return "bootflash:"
             return "flash:"
-            
-        # Generic Default
+
         return "flash:"
+
+
+# ---------------------------------------------------------------------------
+# Logging-aware command wrappers
+# ---------------------------------------------------------------------------
+
+def _scrapli_send(conn, cmd: str, session: SwimSessionLogger):
+    """Send a Scrapli command with full logging of send/response/error."""
+    session.command(cmd)
+    try:
+        response = conn.send_command(cmd)
+        session.response(cmd, response.result)
+        return response
+    except Exception as e:
+        session.command_failed(cmd, e)
+        raise
+
+
+def _netmiko_send(conn, cmd: str, session: SwimSessionLogger):
+    """Send a Netmiko command with full logging of send/response/error."""
+    session.command(cmd)
+    try:
+        output = conn.send_command(cmd)
+        session.response(cmd, output)
+        return output
+    except Exception as e:
+        session.command_failed(cmd, e)
+        raise
+
+
+def _unicon_execute(conn, cmd: str, session: SwimSessionLogger):
+    """Execute a Unicon command with full logging of send/response/error."""
+    session.command(cmd)
+    try:
+        output = conn.execute(cmd)
+        session.response(cmd, output)
+        return output
+    except Exception as e:
+        session.command_failed(cmd, e)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Connection adapters
+# ---------------------------------------------------------------------------
 
 class ScrapliTask(UpgradeTask):
     """Adapter for raw Scrapli connections."""
     @contextmanager
     def connect(self, device, **kwargs):
         from scrapli import Scrapli
-        
         from ..constants import PLATFORM_MAPPINGS
-        
-        # 1. Ask the parent class for the standardized variables
+
+        session = SwimSessionLogger(device, library='Scrapli')
         host, username, password, secret, platform_slug = self._get_credentials(device)
-        
-        # 2. Tap the Global Mapper to retrieve Scrapli's specifically required dialect
         dialect = PLATFORM_MAPPINGS.get(platform_slug, PLATFORM_MAPPINGS['default'])
-        
-        # 3. Construct the Scrapli-specific connection dictionary
+
         conn_dict = {
             "host": host,
             "auth_username": username,
@@ -110,33 +143,43 @@ class ScrapliTask(UpgradeTask):
                 ]
             }
         }
-        
-        # Only inject the secret if one was actually provided
+
         if secret:
             conn_dict["auth_secondary"] = secret
-            
-        # Support **kwargs injections globally
+
         conn_dict.update(kwargs)
-        
+
+        session.connecting(host, username)
         conn = Scrapli(**conn_dict)
-        conn.open()
+        try:
+            conn.open()
+            session.connected()
+        except Exception as e:
+            session.connect_failed(e)
+            raise
+
+        conn._swim_session = session
         try:
             yield conn
         finally:
-            conn.close()
+            try:
+                conn.close()
+            except Exception:
+                pass
+            session.disconnected()
+
 
 class NetmikoTask(UpgradeTask):
     """Adapter for standard Netmiko connections."""
     @contextmanager
     def connect(self, device, **kwargs):
         from netmiko import ConnectHandler
-        
         from ..constants import PLATFORM_MAPPINGS
-        
+
+        session = SwimSessionLogger(device, library='Netmiko')
         host, username, password, secret, platform_slug = self._get_credentials(device)
-        
         dialect = PLATFORM_MAPPINGS.get(platform_slug, PLATFORM_MAPPINGS['default'])
-        
+
         device_dict = {
             'device_type': dialect['netmiko'],
             'host': host,
@@ -147,32 +190,49 @@ class NetmikoTask(UpgradeTask):
             'session_timeout': 60,
             'global_delay_factor': 1
         }
-        
+
         if secret:
             device_dict['secret'] = secret
-            
+
         device_dict.update(kwargs)
-        
-        with ConnectHandler(**device_dict) as conn:
+
+        session.connecting(host, username)
+        try:
+            conn = ConnectHandler(**device_dict)
+            session.connected()
+        except Exception as e:
+            session.connect_failed(e)
+            raise
+
+        conn._swim_session = session
+        try:
             if secret:
                 try:
                     conn.enable()
-                except Exception:
-                    pass
+                    session.debug("Enable mode entered")
+                except Exception as e:
+                    session.warning(f"Enable mode failed (continuing): {e}")
             yield conn
+        finally:
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
+            session.disconnected()
+
 
 class UniconTask(UpgradeTask):
     """Adapter for Unicon automation scripts."""
     @contextmanager
     def connect(self, device, **kwargs):
         from genie.testbed import load
-        
         from ..constants import PLATFORM_MAPPINGS
-        
+        import logging
+
+        session = SwimSessionLogger(device, library='Unicon')
         host, username, password, secret, platform_slug = self._get_credentials(device)
         dialect = PLATFORM_MAPPINGS.get(platform_slug, PLATFORM_MAPPINGS['default'])
-        
-        # Construct credentials
+
         creds = {
             'default': {
                 'username': username,
@@ -181,8 +241,7 @@ class UniconTask(UpgradeTask):
         }
         if secret:
             creds['enable'] = {'password': secret}
-            
-        # Build the pyATS testbed config dict
+
         tb_conf = {
             'devices': {
                 str(device.name): {
@@ -198,25 +257,36 @@ class UniconTask(UpgradeTask):
                 }
             }
         }
-        
+
         tb = load(tb_conf)
         pyats_device = tb.devices[str(device.name)]
-        
-        # Suppress logging spam
-        import logging
-        logging.getLogger('unicon').setLevel(logging.CRITICAL)
-        
-        pyats_device.connect(alias='cli', log_stdout=False, **kwargs)
-        
+
+        # Suppress Unicon's internal spam unless SWIM is in DEBUG mode itself
+        unicon_level = logging.DEBUG if swim_log.level <= logging.DEBUG else logging.WARNING
+        logging.getLogger('unicon').setLevel(unicon_level)
+
+        session.connecting(host, username)
+        try:
+            pyats_device.connect(alias='cli', log_stdout=False, **kwargs)
+            session.connected()
+        except Exception as e:
+            session.connect_failed(e)
+            raise
+
+        pyats_device._swim_session = session
         try:
             yield pyats_device
         finally:
-            pyats_device.disconnect()
+            try:
+                pyats_device.disconnect()
+            except Exception:
+                pass
+            session.disconnected()
+
 
 class PanosRestTask(UpgradeTask):
     """Adapter for Palo Alto REST connections."""
     def connect(self, device):
-        # Boilerplate for PAN-OS XML/REST API
         pass
 
     def execute(self, device, target_image):

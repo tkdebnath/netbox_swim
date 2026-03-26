@@ -13,6 +13,165 @@ class CiscoSyncLogicMixin:
     Vendor-specific diff/save logic for Cisco devices.
     Operates on the standardized schema returned by parsers.
     """
+
+    def _get_or_create_device_type(self, model_str, platform_slug, part_number=None,
+                                    manufacturer=None, platform=None):
+        """
+        Resolves a DeviceType by model string using a 3-level lookup.
+        If no match is found, auto-creates the DeviceType.
+
+        Manufacturer resolution priority:
+          1. Explicit `manufacturer` kwarg (Manufacturer object, name, or slug string)
+          2. `platform.manufacturer` — NetBox Platform FK (most reliable when set)
+          3. Inferred from `platform_slug` string (cisco/juniper/arista/panos)
+
+        Returns: (device_type, created: bool)
+        """
+        import re
+        from dcim.models import DeviceType, Manufacturer
+
+        # --- 3-level DeviceType lookup ---
+        obj = (
+            DeviceType.objects.filter(model=model_str).first()
+            or DeviceType.objects.filter(model__iexact=model_str).first()
+            or DeviceType.objects.filter(model__icontains=model_str.split('-')[0]).first()
+        )
+        if obj:
+            return obj, False
+
+        # --- Manufacturer resolution (3-tier) ---
+        resolved_manufacturer = None
+
+        # Tier 1: explicit argument (Manufacturer object or name/slug string)
+        if manufacturer:
+            if hasattr(manufacturer, 'pk'):  # Already a Manufacturer model object
+                resolved_manufacturer = manufacturer
+            else:
+                mfr_str = str(manufacturer)
+                resolved_manufacturer = (
+                    Manufacturer.objects.filter(slug=mfr_str).first()
+                    or Manufacturer.objects.filter(name__iexact=mfr_str).first()
+                )
+
+        # Tier 2: platform.manufacturer FK (set in NetBox Platform definition)
+        if not resolved_manufacturer and platform:
+            resolved_manufacturer = getattr(platform, 'manufacturer', None)
+
+        # Tier 3: infer vendor hint from platform_slug string
+        if not resolved_manufacturer:
+            slug_lower = (platform_slug or '').lower()
+            if 'juniper' in slug_lower or 'junos' in slug_lower:
+                vendor_hint = 'juniper'
+            elif 'arista' in slug_lower or 'eos' in slug_lower:
+                vendor_hint = 'arista'
+            elif 'palo' in slug_lower or 'panos' in slug_lower:
+                vendor_hint = 'palo-alto'
+            else:
+                vendor_hint = 'cisco'  # default for IOS / IOS-XE / NX-OS
+
+            resolved_manufacturer = (
+                Manufacturer.objects.filter(slug=vendor_hint).first()
+                or Manufacturer.objects.filter(name__iexact=vendor_hint).first()
+            )
+            if not resolved_manufacturer:
+                mfr_name = vendor_hint.replace('-', ' ').title()
+                mfr_slug = re.sub(r'[^a-z0-9-]', '-', vendor_hint.lower()).strip('-')
+                resolved_manufacturer, _ = Manufacturer.objects.get_or_create(
+                    slug=mfr_slug,
+                    defaults={'name': mfr_name}
+                )
+
+        # --- Generate unique slug ---
+        base_slug = re.sub(r'[^a-z0-9-]', '-', model_str.lower()).strip('-')
+        slug = base_slug
+        counter = 1
+        while DeviceType.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        device_type, created = DeviceType.objects.get_or_create(
+            model=model_str,
+            defaults={
+                'manufacturer': resolved_manufacturer,
+                'slug': slug,
+                'part_number': part_number or '',
+            }
+        )
+        return device_type, created
+
+    def _get_or_create_platform(self, name, slug=None, manufacturer=None, platform_slug_hint=None):
+        """
+        Resolves a Platform by name/slug using a 3-level lookup.
+        If no match is found, auto-creates the Platform.
+
+        Args:
+            name             : Platform name (e.g. 'Cisco IOS-XE')
+            slug             : Optional explicit slug. Auto-generated from name if omitted.
+            manufacturer     : Optional Manufacturer object or name/slug string to link.
+            platform_slug_hint: Optional platform slug string to infer manufacturer if
+                               manufacturer arg is not given.
+
+        Returns: (platform, created: bool)
+        """
+        import re
+        from dcim.models import Platform, Manufacturer
+
+        # 3-level lookup
+        obj = (
+            Platform.objects.filter(slug=slug).first() if slug else None
+        ) or (
+            Platform.objects.filter(name__iexact=name).first()
+        ) or (
+            Platform.objects.filter(slug__icontains=name.lower().split()[0]).first()
+        )
+        if obj:
+            return obj, False
+
+        # --- Manufacturer resolution (same 3-tier as _get_or_create_device_type) ---
+        resolved_manufacturer = None
+        if manufacturer:
+            if hasattr(manufacturer, 'pk'):
+                resolved_manufacturer = manufacturer
+            else:
+                mfr_str = str(manufacturer)
+                resolved_manufacturer = (
+                    Manufacturer.objects.filter(slug=mfr_str).first()
+                    or Manufacturer.objects.filter(name__iexact=mfr_str).first()
+                )
+
+        if not resolved_manufacturer and platform_slug_hint:
+            slug_lower = platform_slug_hint.lower()
+            if 'juniper' in slug_lower or 'junos' in slug_lower:
+                vendor_hint = 'juniper'
+            elif 'arista' in slug_lower or 'eos' in slug_lower:
+                vendor_hint = 'arista'
+            elif 'palo' in slug_lower or 'panos' in slug_lower:
+                vendor_hint = 'palo-alto'
+            else:
+                vendor_hint = 'cisco'
+            resolved_manufacturer = (
+                Manufacturer.objects.filter(slug=vendor_hint).first()
+                or Manufacturer.objects.filter(name__iexact=vendor_hint).first()
+            )
+
+        # Generate slug if not explicitly provided
+        auto_slug = slug or re.sub(r'[^a-z0-9-]', '-', name.lower()).strip('-')
+        counter = 1
+        final_slug = auto_slug
+        while Platform.objects.filter(slug=final_slug).exists():
+            final_slug = f"{auto_slug}-{counter}"
+            counter += 1
+
+        defaults = {'name': name, 'slug': final_slug}
+        if resolved_manufacturer:
+            defaults['manufacturer'] = resolved_manufacturer
+
+        platform_obj, created = Platform.objects.get_or_create(
+            name=name,
+            defaults=defaults
+        )
+        return platform_obj, created
+
     def _process_cisco_ios_facts(self, device, golden_schema, auto_update, raw_version="", parser_instance=None):
         from ...models import DeviceSyncRecord
         record = DeviceSyncRecord.objects.filter(device=device, status='syncing').last()
@@ -38,6 +197,9 @@ class CiscoSyncLogicMixin:
         live_hardware = golden_schema.get('hardware')
         live_version = golden_schema.get('version')
         live_serial = golden_schema.get('serial')
+        live_part_number = golden_schema.get('part_number')
+        live_manufacturer = golden_schema.get('manufacturer')  # e.g. 'Cisco' from parser
+        live_platform_name = golden_schema.get('platform')     # e.g. 'Cisco IOS-XE 17.x' from parser
 
         # 1. Check Hostname
         if live_hostname and device.name != live_hostname:
@@ -49,13 +211,104 @@ class CiscoSyncLogicMixin:
         if live_hardware:
             current_model = getattr(device.device_type, 'model', '')
             if current_model != live_hardware:
-                diff_dictionary['model'] = {'old': current_model, 'new': live_hardware}
                 try:
-                    new_device_type = DeviceType.objects.get(model=live_hardware)
+                    platform_slug = getattr(device.platform, 'slug', '')
+                    new_device_type, created = self._get_or_create_device_type(
+                        live_hardware, platform_slug,
+                        part_number=live_part_number,
+                        platform=device.platform,
+                        manufacturer=live_manufacturer,  # explicit from parser
+                    )
+                    diff_dictionary['model'] = {'old': current_model, 'new': new_device_type.model}
                     device.device_type = new_device_type
-                    changes_made.append(f"Updated Device Type to {live_hardware}")
-                except DeviceType.DoesNotExist:
-                    changes_made.append(f"Discovered model {live_hardware} but it does not exist in NetBox DB.")
+                    action = 'Auto-Created' if created else 'Updated'
+                    changes_made.append(f"{action} Device Type to {new_device_type.model} (from '{live_hardware}')")
+                except Exception as e:
+                    changes_made.append(f"DeviceType lookup/create failed for '{live_hardware}': {e}")
+
+        # 2b. Check Part Number (via DeviceType.part_number)
+        if live_part_number:
+            current_part = getattr(device.device_type, 'part_number', '')
+            if current_part != live_part_number:
+                try:
+                    # If model check already resolved/created the device_type, just update part_number on it
+                    if diff_dictionary.get('model') and device.device_type:
+                        if not device.device_type.part_number:
+                            device.device_type.part_number = live_part_number
+                            device.device_type.save(update_fields=['part_number'])
+                        diff_dictionary['part_number'] = {'old': current_part, 'new': live_part_number}
+                        changes_made.append(f"Updated Part Number to {live_part_number} on DeviceType {device.device_type.model}")
+                    else:
+                        # Independent part_number lookup/create
+                        platform_slug = getattr(device.platform, 'slug', '')
+                        matched_dt = (
+                            DeviceType.objects.filter(part_number=live_part_number).first()
+                            or DeviceType.objects.filter(part_number__iexact=live_part_number).first()
+                            or DeviceType.objects.filter(part_number__icontains=live_part_number.split('-')[0]).first()
+                        )
+                        if matched_dt:
+                            diff_dictionary['part_number'] = {'old': current_part, 'new': matched_dt.part_number}
+                            device.device_type = matched_dt
+                            changes_made.append(f"Updated Device Type via Part Number match: {matched_dt.part_number}")
+                        else:
+                            # No match — auto-create DeviceType keyed by part_number as the model
+                            new_dt, created = self._get_or_create_device_type(
+                                live_part_number, platform_slug,
+                                part_number=live_part_number,
+                                platform=device.platform,
+                                manufacturer=live_manufacturer,  # explicit from parser
+                            )
+                            diff_dictionary['part_number'] = {'old': current_part, 'new': new_dt.part_number}
+                            device.device_type = new_dt
+                            action = 'Auto-Created' if created else 'Linked'
+                            changes_made.append(f"{action} DeviceType for Part Number '{live_part_number}'")
+                except Exception as e:
+                    changes_made.append(f"Part number lookup/create failed for '{live_part_number}': {e}")
+
+        # 2c. Check/create Platform (name reported by device vs. NetBox)
+        #     Must run BEFORE 2d so manufacturer back-fill targets the correct platform object.
+        if live_platform_name:
+            current_platform_name = getattr(device.platform, 'name', None)
+            if current_platform_name != live_platform_name:
+                try:
+                    platform_slug = getattr(device.platform, 'slug', '')
+                    # Use the Manufacturer object already resolved from DeviceType (same record).
+                    # Fall back to the raw parser string only if DeviceType has no manufacturer.
+                    resolved_mfr = (
+                        getattr(device.device_type, 'manufacturer', None)
+                        or live_manufacturer
+                    )
+                    new_platform, created = self._get_or_create_platform(
+                        name=live_platform_name,
+                        manufacturer=resolved_mfr,
+                        platform_slug_hint=platform_slug,
+                    )
+                    diff_dictionary['platform'] = {'old': current_platform_name, 'new': new_platform.name}
+                    device.platform = new_platform
+                    action = 'Auto-Created' if created else 'Updated'
+                    changes_made.append(f"{action} Platform to '{new_platform.name}'")
+                except Exception as e:
+                    changes_made.append(f"Platform lookup/create failed for '{live_platform_name}': {e}")
+
+        # 2d. Back-fill Platform.manufacturer from the resolved DeviceType.manufacturer
+        #     Runs after 2c so device.platform is the final, correct platform object.
+        if device.platform and device.device_type:
+            resolved_mfr = getattr(device.device_type, 'manufacturer', None)
+            platform_mfr = getattr(device.platform, 'manufacturer', None)
+            if resolved_mfr and not platform_mfr:
+                try:
+                    device.platform.manufacturer = resolved_mfr
+                    device.platform.save(update_fields=['manufacturer'])
+                    diff_dictionary['platform_manufacturer'] = {
+                        'old': None,
+                        'new': resolved_mfr.name
+                    }
+                    changes_made.append(
+                        f"Back-filled Platform '{device.platform.name}' manufacturer "
+                        f"to '{resolved_mfr.name}' (sourced from DeviceType)"
+                    )
+                except Exception as e:
+                    changes_made.append(f"Platform manufacturer update failed: {e}")
 
         # 3. Check Serial
         if live_serial and device.serial != live_serial:
