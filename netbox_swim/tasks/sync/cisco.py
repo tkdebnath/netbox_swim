@@ -524,6 +524,11 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
                     pass
 
                 response_ver = str(conn.execute("show version"))
+                if not response_ver.strip():
+                    raise RuntimeError(
+                        f"[Unicon] 'show version' returned no output from {device.name} "
+                        f"({host}). Device may have disconnected or the command was rejected."
+                    )
                 parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
                 golden_schema = parser_ver.get_facts()
 
