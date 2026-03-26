@@ -9,16 +9,16 @@
             <div class="card-body">
                 <table class="table table-hover attr-table">
                     <tr>
-                        <th scope="row">Platform</th>
-                        <td>{{ object.platform|linkify }}</td>
-                    </tr>
-                    <tr>
                         <th scope="row">Designated Image</th>
                         <td>{{ object.image|linkify }}</td>
                     </tr>
                     <tr>
                         <th scope="row">Version</th>
-                        <td>{{ object.image.version }}</td>
+                        <td><code>{{ object.image.version }}</code></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Deployment Mode</th>
+                        <td>{{ object.get_deployment_mode_display }}</td>
                     </tr>
                 </table>
             </div>
@@ -32,5 +32,28 @@
         {% include 'inc/panels/custom_fields.html' %}
         {% include 'inc/panels/tags.html' %}
     </div>
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Device Types</h5>
+            <div class="card-body">
+                {% for dt in object.device_types.all %}
+                    {{ dt|linkify }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                    <span class="text-muted">No device types assigned</span>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <h5 class="card-header">Hardware Groups</h5>
+            <div class="card-body">
+                {% for hg in object.hardware_groups.all %}
+                    {{ hg|linkify }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                    <span class="text-muted">No hardware groups assigned</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock content %}
+

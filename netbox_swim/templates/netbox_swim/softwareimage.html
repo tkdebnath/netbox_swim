@@ -30,7 +30,7 @@
                     </tr>
                     <tr>
                         <th scope="row">File Size</th>
-                        <td>{{ object.file_size_display }}</td>
+                        <td>{% if object.file_size_bytes %}{{ object.file_size_bytes|filesizeformat }}{% else %}—{% endif %}</td>
                     </tr>
                     <tr>
                         <th scope="row">Release Notes</th>
