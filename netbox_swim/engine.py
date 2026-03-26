@@ -603,6 +603,9 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
     except UpgradeJob.DoesNotExist:
         return f"UpgradeJob {job_id} not found"
 
+    if upgrade.status == 'cancelled':
+        return f"UpgradeJob {job_id} was cancelled by user. Aborting execution."
+
     # Restore execution context if stored during scheduling
     if not dry_run and upgrade.extra_config:
         dry_run = upgrade.extra_config.get('dry_run', False)
@@ -816,135 +819,144 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
                 continue
 
             # --- Task Registry steps (require SSH connection) ---
+            # Module Mapping logic
             if action not in TASK_REGISTRY:
-                log_entry.log_output += f"No mapped Engine Task for {action}. Simulating success.\n"
-                log_entry.is_success = True
-                log_entry.save()
-                continue
-                
-            # --- 2. Iterate libraries by sequence until success ---
-            step_success = False
-            
-            # Action Mapping
-            if mock_run:
-                log_entry.log_output += f"\n[MOCK RUN] Mocking {action} step. No real connections established.\n"
-                log_entry.is_success = True
-                step_success = True
-            elif dry_run and action in ['distribution', 'activation', 'verification']:
-                log_entry.log_output += f"\n[DRY RUN] Bypassing actual {action} logic (State manipulation disabled).\n"
-                log_entry.is_success = True
+                plan = self.generate_pipeline_plan(upgrade.id)
+                log_entry.log_output += f"\nNative execution plan block reached. Proceeding.\n{str(plan)}"
+                # Sleep/Reboot
+                if action == 'reboot':
+                    pass
+                elif action == 'verification_ping':
+                    from .tasks.checks.cisco import PingReachability
+                    pr = PingReachability()
+                    pr.execute(device)
+                    log_entry.log_output += f"\nPing Reachability executed natively.\n"
+                    
                 step_success = True
             else:
-                for lib in priority_list:
-                    executor_class = TASK_REGISTRY[action].get(lib)
-                    if not executor_class:
-                        continue
+                # --- 2. Iterate libraries by sequence until success ---
+                step_success = False
+                
+                # Action Mapping
+                if mock_run:
+                    log_entry.log_output += f"\n[MOCK RUN] Mocking {action} step. No real connections established.\n"
+                    log_entry.is_success = True
+                    step_success = True
+                elif dry_run and action in ['distribution', 'activation', 'verification']:
+                    log_entry.log_output += f"\n[DRY RUN] Bypassing actual {action} logic (State manipulation disabled).\n"
+                    log_entry.is_success = True
+                    step_success = True
+                else:
+                    for lib in priority_list:
+                        executor_class = TASK_REGISTRY[action].get(lib)
+                        if not executor_class:
+                            continue
+                            
+                        log_entry.log_output += f"\nAttempting execution using connection library: [{lib.upper()}]\n"
+                        executor = executor_class()
                         
-                    log_entry.log_output += f"\nAttempting execution using connection library: [{lib.upper()}]\n"
-                    executor = executor_class()
-                    
-                    try:
-                        if action in ['precheck', 'postcheck']:
-                            output_dirs, report_blob = executor.execute(device, target_image, step=step, job=upgrade, phase=action)
-                            log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
-                            
-                            # Standard executors return output_dirs=None to indicate an un-recoverable fault/not-implemented. 
-                            if output_dirs is None:
-                                if "not yet implemented" in str(report_blob).lower():
-                                    log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
-                                    continue
-                                else:
-                                    log_entry.log_output += f"[{lib.upper()}] aborted checks gracefully. Proceeding with deterministic failure.\n"
-                                    step_success = False
-                                    log_entry.is_success = False
-                                    break
+                        try:
+                            if action in ['precheck', 'postcheck']:
+                                output_dirs, report_blob = executor.execute(device, target_image, step=step, job=upgrade, phase=action)
+                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
                                 
-                            if action == 'precheck':
-                                precheck_output = report_blob
-                            else:
-                                postcheck_output = report_blob
-                                
-                                # Auto-Diff Fallback directly here since it works
-                                log_entry.log_output += "\n--- PRE/POST DIFF REPORT ---\n"
-                                diff = list(difflib.unified_diff(
-                                    precheck_output.splitlines(keepends=True),
-                                    postcheck_output.splitlines(keepends=True),
-                                    fromfile='Pre-Upgrade',
-                                    tofile='Post-Upgrade',
-                                    n=0
-                                ))
-                                if not diff:
-                                    log_entry.log_output += "No operational differences detected."
-                                else:
-                                    log_entry.log_output += "".join(diff)
-                                    
-                            step_success = True
-                            log_entry.is_success = True
-                            break
-                            
-                        else:
-                            # Execute Distribution, Activation, Readiness, Verification
-                            report_blob = executor.execute(device, target_image)
-                            
-                            # Format output based on return type
-                            if isinstance(report_blob, list):
-                                # Readiness returns list of (status, message) tuples
-                                formatted = "\n".join(f"[{str(s).upper()}] {m}" for s, m in report_blob if len(report_blob) > 0 and isinstance(s, str))
-                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{formatted}\n"
-                                
-                                # Check for stubs
-                                is_stub = any("not yet implemented" in str(m).lower() for s, m in report_blob)
-                                if is_stub:
-                                    log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
-                                    continue
-                                    
-                                # Check for failures in structured results
-                                failure_indicators = {'failed', 'fail', 'error'}
-                                has_failure = any(
-                                    str(s).lower() in failure_indicators 
-                                    for s, m in report_blob
-                                )
-                                if has_failure:
-                                    log_entry.log_output += f"[{lib.upper()}] generated structural failure state.\n"
-                                    step_success = False
-                                    log_entry.is_success = False
-                                    break
-                                else:
-                                    step_success = True
-                                    log_entry.is_success = True
-                                    break
-                                    
-                            elif isinstance(report_blob, tuple):
-                                # Verification returns (bool, str)
-                                is_success, message = report_blob
-                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{message}\n"
-                                
-                                if is_success:
-                                    step_success = True
-                                    log_entry.is_success = True
-                                    break
-                                else:
-                                    if "not yet implemented" in str(message).lower():
+                                # Standard executors return output_dirs=None to indicate an un-recoverable fault/not-implemented. 
+                                if output_dirs is None:
+                                    if "not yet implemented" in str(report_blob).lower():
                                         log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
                                         continue
                                     else:
-                                        log_entry.log_output += f"[{lib.upper()}] execution returned deterministic failure.\n"
+                                        log_entry.log_output += f"[{lib.upper()}] aborted checks gracefully. Proceeding with deterministic failure.\n"
                                         step_success = False
                                         log_entry.is_success = False
                                         break
-                            else:
-                                log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
+                                    
+                                if action == 'precheck':
+                                    precheck_output = report_blob
+                                else:
+                                    postcheck_output = report_blob
+                                    
+                                    # Auto-Diff Fallback directly here since it works
+                                    log_entry.log_output += "\n--- PRE/POST DIFF REPORT ---\n"
+                                    diff = list(difflib.unified_diff(
+                                        precheck_output.splitlines(keepends=True),
+                                        postcheck_output.splitlines(keepends=True),
+                                        fromfile='Pre-Upgrade',
+                                        tofile='Post-Upgrade',
+                                        n=0
+                                    ))
+                                    if not diff:
+                                        log_entry.log_output += "No operational differences detected."
+                                    else:
+                                        log_entry.log_output += "".join(diff)
+                                        
                                 step_success = True
                                 log_entry.is_success = True
                                 break
-                    except Exception as e:
-                        log_entry.log_output += f"\nERROR using [{lib.upper()}]: {str(e)}\n"
-                        continue
-                        
-                if not step_success:
-                    overall_success = False
-                    log_entry.is_success = False
-                    log_entry.log_output += f"\n[FATAL] Exhausted all fallback connection libraries. Action {action.upper()} failed.\n"
+                                
+                            else:
+                                # Execute Distribution, Activation, Readiness, Verification
+                                report_blob = executor.execute(device, target_image)
+                                
+                                # Format output based on return type
+                                if isinstance(report_blob, list):
+                                    # Readiness returns list of (status, message) tuples
+                                    formatted = "\n".join(f"[{str(s).upper()}] {m}" for s in report_blob if len(report_blob) > 0 and isinstance(s, str))
+                                    log_entry.log_output += f"{action.upper()} OUTPUT:\n{formatted}\n"
+                                    
+                                    # Check for stubs
+                                    is_stub = any("not yet implemented" in str(m).lower() for s, m in report_blob)
+                                    if is_stub:
+                                        log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
+                                        continue
+                                        
+                                    # Check for failures in structured results
+                                    failure_indicators = {'failed', 'fail', 'error'}
+                                    has_failure = any(
+                                        str(s).lower() in failure_indicators 
+                                        for s, m in report_blob
+                                    )
+                                    if has_failure:
+                                        log_entry.log_output += f"[{lib.upper()}] generated structural failure state.\n"
+                                        step_success = False
+                                        log_entry.is_success = False
+                                        break
+                                    else:
+                                        step_success = True
+                                        log_entry.is_success = True
+                                        break
+                                        
+                                elif isinstance(report_blob, tuple):
+                                    # Verification returns (bool, str)
+                                    is_success, message = report_blob
+                                    log_entry.log_output += f"{action.upper()} OUTPUT:\n{message}\n"
+                                    
+                                    if is_success:
+                                        step_success = True
+                                        log_entry.is_success = True
+                                        break
+                                    else:
+                                        if "not yet implemented" in str(message).lower():
+                                            log_entry.log_output += f"[{lib.upper()}] stub detected (Not Implemented). Rapidly falling back to next driver...\n"
+                                            continue
+                                        else:
+                                            log_entry.log_output += f"[{lib.upper()}] execution returned deterministic failure.\n"
+                                            step_success = False
+                                            log_entry.is_success = False
+                                            break
+                                else:
+                                    log_entry.log_output += f"{action.upper()} OUTPUT:\n{str(report_blob)}\n"
+                                    step_success = True
+                                    log_entry.is_success = True
+                                    break
+                        except Exception as e:
+                            log_entry.log_output += f"\nERROR using [{lib.upper()}]: {str(e)}\n"
+                            continue
+                            
+                    if not step_success:
+                        overall_success = False
+                        log_entry.is_success = False
+                        log_entry.log_output += f"\n[FATAL] Exhausted all fallback connection libraries. Action {action.upper()} failed.\n"
 
         except Exception as e:
             overall_success = False
@@ -956,7 +968,7 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
             # We generally halt the pipeline if a step fails (e.g., Readiness/Distribution).
             # However, we want to ensure Post-Checks and Reports ALWAYS run even if 
             # Verification fails, so we can gather crucial state diffs for debugging.
-            if action in ['verification', 'postcheck', 'report']:
+            if action in ['verification', 'postcheck', 'report'] and upgrade.status != 'cancelled':
                 logger.warning(f"[Engine] Step '{action}' failed, but continuing pipeline to gather artifacts.")
             else:
                 break
@@ -966,6 +978,8 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
         archive_meta = _generate_checks_archive(upgrade)
         if archive_meta:
             upgrade.extra_config['checks_archive'] = archive_meta
+            if not isinstance(upgrade.job_log, list):
+                upgrade.job_log = []
             upgrade.job_log.append({
                 "time": timezone.now().isoformat(),
                 "level": "info",
@@ -974,7 +988,8 @@ def execute_upgrade_job(job_id, dry_run=False, mock_run=False):
     except Exception as e:
         logger.error(f"Failed to compile Checks Archive for {upgrade.id}: {str(e)}")
             
-    upgrade.status = 'completed' if overall_success else 'failed'
+    if upgrade.status != 'cancelled':
+        upgrade.status = 'completed' if overall_success else 'failed'
     upgrade.end_time = timezone.now()
     upgrade.save()
     

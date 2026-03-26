@@ -871,6 +871,9 @@ class UpgradeJobCancelView(generic.ObjectEditView):
     def post(self, request, *args, **kwargs):
         return self.get(request, *args, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        return self.get(request, *args, **kwargs)
+
 # ============================================================
 # PILLAR: Sync Record Consolidation
 # ============================================================
