@@ -354,7 +354,7 @@ class CheckTemplateBulkDeleteView(generic.BulkDeleteView):
 
 class DeviceComplianceEditView(generic.ObjectEditView):
     queryset = models.DeviceCompliance.objects.all()
-    form = forms.SoftwareImageForm
+    form = forms.DeviceComplianceForm
 
 class DeviceComplianceDeleteView(generic.ObjectDeleteView):
     queryset = models.DeviceCompliance.objects.all()

@@ -6,12 +6,11 @@ from ..models import (
     HardwareGroup, FileServer, DeviceSyncRecord, SyncJob,
     ValidationCheck, CheckTemplate
 )
-from dcim.api.serializers import NestedPlatformSerializer, NestedDeviceTypeSerializer, NestedRegionSerializer, NestedSiteSerializer, NestedDeviceSerializer
-
+from dcim.api.serializers import PlatformSerializer, DeviceTypeSerializer, RegionSerializer, SiteSerializer, DeviceSerializer
 
 class HardwareGroupSerializer(NetBoxModelSerializer):
-    platforms = NestedPlatformSerializer(many=True, required=False)
-    device_types = NestedDeviceTypeSerializer(many=True, required=False)
+    platforms = PlatformSerializer(many=True, required=False, nested=True)
+    device_types = DeviceTypeSerializer(many=True, required=False, nested=True)
     class Meta:
         model = HardwareGroup
         fields = (
@@ -21,6 +20,9 @@ class HardwareGroupSerializer(NetBoxModelSerializer):
         )
 
 class FileServerSerializer(NetBoxModelSerializer):
+    regions = RegionSerializer(many=True, required=False, nested=True)
+    sites = SiteSerializer(many=True, required=False, nested=True)
+    devices = DeviceSerializer(many=True, required=False, nested=True)
     class Meta:
         model = FileServer
         fields = (
@@ -29,10 +31,9 @@ class FileServerSerializer(NetBoxModelSerializer):
             'description', 'tags', 'custom_fields', 'created', 'last_updated',
         )
 
-
 class SoftwareImageSerializer(NetBoxModelSerializer):
-    platform = NestedPlatformSerializer(required=False)
-    device_types = NestedDeviceTypeSerializer(many=True, required=False)
+    platform = PlatformSerializer(required=False, nested=True)
+    device_types = DeviceTypeSerializer(many=True, required=False, nested=True)
     class Meta:
         model = SoftwareImage
         fields = (

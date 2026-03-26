@@ -106,6 +106,15 @@ class GoldenImageForm(NetBoxModelForm):
         model = models.GoldenImage
         fields = ('device_type', 'hardware_group', 'deployment_mode', 'image', 'description', 'tags')
 
+class DeviceComplianceForm(NetBoxModelForm):
+    device = DynamicModelChoiceField(queryset=Device.objects.all())
+
+    class Meta:
+        model = models.DeviceCompliance
+        fields = ('device', 'status', 'current_version', 'expected_version', 'last_checked', 'detail', 'tags')
+        widgets = {
+            'last_checked': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+        }
 
 class WorkflowTemplateForm(NetBoxModelForm):
     class Meta:
