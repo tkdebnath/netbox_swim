@@ -607,16 +607,40 @@ class UpgradeJobDownloadFragmentView(generic.ObjectView):
         base_media = getattr(settings, 'MEDIA_ROOT', '/opt/netbox/netbox/media')
         target_dir = os.path.join(base_media, 'swim', 'checks', str(job.id), fragment)
 
-        if not os.path.exists(target_dir):
-            raise Http404(f"Folder '{fragment}' does not exist for this job.")
-
         buffer = io.BytesIO()
+        has_content = False
+        
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for root, _, files in os.walk(target_dir):
-                for f in files:
-                    file_path = os.path.join(root, f)
-                    arcname = os.path.relpath(file_path, target_dir)
-                    zf.write(file_path, arcname)
+            # First attempt: Try to parse physical disk pyATS files
+            if os.path.exists(target_dir):
+                for root, _, files in os.walk(target_dir):
+                    for f in files:
+                        file_path = os.path.join(root, f)
+                        arcname = os.path.relpath(file_path, target_dir)
+                        zf.write(file_path, arcname)
+                        has_content = True
+            
+            # Second attempt (Fallback): Read strictly from JobLogs into ZIP buffer
+            if not has_content:
+                db_logs = job.logs.filter(action_type=fragment).order_by('timestamp')
+                for idx, log in enumerate(db_logs, 1):
+                    has_content = True
+                    safe_action = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in log.action_type)
+                    ts = log.timestamp.strftime('%H%M%S') if log.timestamp else '000000'
+                    entry_name = f"{safe_action}_{idx}_{ts}.txt"
+    
+                    header = f"Fragment: {fragment.upper()}\n"
+                    header += f"Step: {log.step or 'System Engine'}\n"
+                    header += f"Result: {'SUCCESS' if log.is_success else 'FAILED'}\n"
+                    header += f"Timestamp: {log.timestamp}\n"
+                    header += f"{'=' * 60}\n\n"
+                    zf.writestr(entry_name, header + (log.log_output or 'No output recorded.'))
+        
+        if not has_content:
+            from django.contrib import messages
+            from django.shortcuts import redirect
+            messages.warning(request, f"No '{fragment}' output found on disk or database for this job.")
+            return redirect(job.get_absolute_url())
 
         buffer.seek(0)
         device_name = getattr(job.device, 'name', f"device_{job.id}")
