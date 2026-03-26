@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from .swim_logger import SwimSessionLogger, swim_log
+from ..swim_logger import SwimSessionLogger, swim_log
 
 
 class UpgradeTask:
