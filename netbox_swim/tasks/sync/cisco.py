@@ -97,7 +97,16 @@ class CiscoSyncLogicMixin:
                 'part_number': part_number or '',
             }
         )
+
+        # get_or_create only applies 'defaults' on creation.
+        # If the DeviceType already existed with a blank part_number,
+        # update it now if we have a valid value.
+        if not created and part_number and not device_type.part_number:
+            device_type.part_number = part_number
+            device_type.save(update_fields=['part_number'])
+
         return device_type, created
+
 
     def _get_or_create_platform(self, name, slug=None, manufacturer=None, platform_slug_hint=None):
         """
