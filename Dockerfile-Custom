@@ -24,5 +24,10 @@ RUN /usr/local/bin/uv pip install --upgrade --no-cache-dir /opt/netbox/netbox_sw
 # Ensure everything in the venv and plugin folder is owned by netbox again
 RUN chown -R netbox:root /opt/netbox/venv /opt/netbox/netbox_swim
 
+# 8. Pre-create the swim log file with correct netbox ownership
+RUN touch /opt/netbox/swim.log && \
+    chown netbox:root /opt/netbox/swim.log && \
+    chmod 664 /opt/netbox/swim.log
+
 # 7. CRITICAL: Switch back to the 'netbox' user for security
 USER netbox
