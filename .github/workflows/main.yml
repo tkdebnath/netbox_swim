@@ -32,3 +32,8 @@ jobs:
           # Migrations are committed to the repo — just apply them
           # docker exec netbox-docker-netbox-1 python3 manage.py makemigrations netbox_swim --no-input
           docker exec netbox-docker-netbox-1 python3 manage.py migrate netbox_swim --no-input
+
+      - name: Cleanup Old Docker Images
+        run: |
+          # Deletes dangling images created by the CACHEBUST rebuild
+          docker image prune -f
