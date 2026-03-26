@@ -513,24 +513,30 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
             with self.connect(device) as conn:
                 slug = device.platform.slug if device.platform else 'cisco_ios'
 
+                # conn.execute() can return pyATS/Genie parsed objects when
+                # Genie parsers are installed. Always cast to str() to ensure
+                # our parsers receive raw CLI text, not structured dicts.
                 hostname = None
-                if hasattr(device, 'learned_hostname') and device.learned_hostname:
-                    hostname = device.learned_hostname
+                try:
+                    if hasattr(conn, 'hostname') and conn.hostname:
+                        hostname = str(conn.hostname)
+                except Exception:
+                    pass
 
-                response_ver = conn.execute("show version")
+                response_ver = str(conn.execute("show version"))
                 parser_ver = CiscoShowVersionParser(raw_string=response_ver, platform_slug=slug)
                 golden_schema = parser_ver.get_facts()
 
                 if hostname:
                     golden_schema['hostname'] = hostname
 
-                response_inv = conn.execute("show inventory")
+                response_inv = str(conn.execute("show inventory"))
                 parser_inv = CiscoShowInventoryParser(raw_string=response_inv, platform_slug=slug)
                 for k, v in parser_inv.get_facts().items():
                     if v: golden_schema[k] = v
 
-                response_run = conn.execute("show running-config")
-                response_interface = conn.execute("show interface")
+                response_run = str(conn.execute("show running-config"))
+                response_interface = str(conn.execute("show interface"))
 
                 fallback_ip = str(device.primary_ip).split('/')[0] if device.primary_ip else ''
                 tacacs_dict = {
@@ -544,8 +550,9 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
                     if v: golden_schema[k] = v
 
                 return self._process_cisco_ios_facts(
-                    device, golden_schema, auto_update, str(response_ver), parser_ver
+                    device, golden_schema, auto_update, response_ver, parser_ver
                 )
+
         except Exception as e:
             import traceback as _tb
             frames = _tb.extract_tb(e.__traceback__)
