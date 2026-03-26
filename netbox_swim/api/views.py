@@ -44,12 +44,12 @@ class WorkflowTemplateViewSet(NetBoxModelViewSet):
 class ValidationCheckViewSet(NetBoxModelViewSet):
     queryset = models.ValidationCheck.objects.prefetch_related('tags')
     serializer_class = serializers.ValidationCheckSerializer
-    # filterset_class = filtersets.ValidationCheckFilterSet
+    filterset_class = filtersets.ValidationCheckFilterSet
 
 class CheckTemplateViewSet(NetBoxModelViewSet):
     queryset = models.CheckTemplate.objects.prefetch_related('checks', 'tags')
     serializer_class = serializers.CheckTemplateSerializer
-    # filterset_class = filtersets.CheckTemplateFilterSet
+    filterset_class = filtersets.CheckTemplateFilterSet
 
 
 class WorkflowStepViewSet(NetBoxModelViewSet):
@@ -69,8 +69,6 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
         if job.status in [
             models.UpgradeJob.StatusChoices.RUNNING,
             models.UpgradeJob.StatusChoices.COMPLETED,
-            models.UpgradeJob.StatusChoices.DISTRIBUTING,
-            models.UpgradeJob.StatusChoices.ACTIVATING,
         ]:
             return Response({"error": f"Job is already {job.get_status_display()}."}, status=400)
 
@@ -271,7 +269,7 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
         from django.utils import timezone as tz
 
         job = self.get_object()
-        logs = job.logs.all().order_by('order', 'timestamp')
+        logs = job.logs.all().order_by('timestamp')
 
         content = []
         content.append(f"EXECUTION LOGS FOR UPGRADE JOB: {job.id}")
@@ -282,7 +280,7 @@ class UpgradeJobViewSet(NetBoxModelViewSet):
 
         for log in logs:
             status_flag = "[SUCCESS]" if log.is_success else "[FAILED]" if log.is_success is False else "[INFO]"
-            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.get_action_display()}")
+            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.action_type}")
             if log.log_output:
                 content.append(f"{'-'*40}\n{log.log_output.strip()}\n{'-'*40}\n")
             else:
@@ -304,6 +302,7 @@ class JobLogViewSet(NetBoxModelViewSet):
 class SyncJobViewSet(NetBoxModelViewSet):
     queryset = models.SyncJob.objects.prefetch_related('device_records', 'tags')
     serializer_class = serializers.SyncJobSerializer
+    filterset_class = filtersets.SyncJobFilterSet
 
 
 class DeviceSyncRecordViewSet(NetBoxModelViewSet):

@@ -612,7 +612,7 @@ class UpgradeJobDownloadLogsView(generic.ObjectView):
         from django.utils import timezone as tz
 
         job = self.get_object()
-        logs = models.JobLog.objects.filter(job=job).order_by('order', 'timestamp')
+        logs = models.JobLog.objects.filter(job=job).order_by('timestamp')
 
         content = []
         content.append(f"EXECUTION LOGS FOR UPGRADE JOB: {job.id}")
@@ -623,7 +623,7 @@ class UpgradeJobDownloadLogsView(generic.ObjectView):
 
         for log in logs:
             status_flag = "[SUCCESS]" if log.is_success else "[FAILED]" if log.is_success is False else "[INFO]"
-            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.get_action_display()}")
+            content.append(f"[{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] {status_flag} STEP: {log.action_type}")
             if log.log_output:
                 content.append(f"{'-'*40}\n{log.log_output.strip()}\n{'-'*40}\n")
             else:
