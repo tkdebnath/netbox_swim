@@ -127,10 +127,19 @@ def capture_compliance_snapshot():
             golden_image = golden_by_dtype.get((device.device_type_id, deployment_mode))
         if not golden_image and hw_group:
             golden_image = golden_by_hwgroup.get((hw_group.pk, deployment_mode))
+            
+        # Fallback 1: Try finding a Universal Golden Image
         if not golden_image and device.device_type_id:
             golden_image = golden_by_dtype.get((device.device_type_id, 'universal'))
         if not golden_image and hw_group:
             golden_image = golden_by_hwgroup.get((hw_group.pk, 'universal'))
+            
+        # Fallback 2: If device mode is unknown/universal, aggressively match any mapped Campus/SDWAN image
+        if not golden_image and deployment_mode == 'universal':
+            if device.device_type_id:
+                golden_image = golden_by_dtype.get((device.device_type_id, 'campus')) or golden_by_dtype.get((device.device_type_id, 'sdwan'))
+            if not golden_image and hw_group:
+                golden_image = golden_by_hwgroup.get((hw_group.pk, 'campus')) or golden_by_hwgroup.get((hw_group.pk, 'sdwan'))
 
         golden_version = golden_image.image.version if golden_image else ''
         gap = compute_version_gap(current_version, golden_version)
