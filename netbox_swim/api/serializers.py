@@ -15,7 +15,9 @@ class HardwareGroupSerializer(NetBoxModelSerializer):
         model = HardwareGroup
         fields = (
             'id', 'display', 'name', 'slug', 'platforms', 'device_types',
-            'min_version', 'max_version', 'deployment_mode', 'description',
+            'min_version', 'max_version', 'deployment_mode', 'is_static',
+            'manual_includes', 'manual_excludes', 'connection_priority',
+            'workflow_template', 'description',
             'tags', 'custom_fields', 'created', 'last_updated',
         )
 
@@ -39,7 +41,8 @@ class SoftwareImageSerializer(NetBoxModelSerializer):
         fields = (
             'id', 'display', 'image_name', 'image_file_name', 'version',
             'image_type', 'file_server', 'platform', 'device_types', 'hardware_groups',
-            'deployment_mode', 'file_size_bytes', 'hash_md5',
+            'deployment_mode', 'min_source_version', 'max_source_version',
+            'file_size_bytes', 'hash_md5',
             'hash_sha256', 'hash_sha512', 'release_notes_url',
             'min_ram_mb', 'min_flash_mb', 'description',
             'tags', 'custom_fields', 'created', 'last_updated',
@@ -115,8 +118,8 @@ class DeviceSyncRecordSerializer(NetBoxModelSerializer):
     class Meta:
         model = DeviceSyncRecord
         fields = (
-            'id', 'display', 'device', 'sync_job', 'status', 'detected_diff', 
-            'log_messages', 'job_id', 'is_active',
+            'id', 'display', 'device', 'sync_job', 'status', 'detected_diff',
+            'live_facts', 'log_messages', 'job_id', 'is_active',
             'tags', 'custom_fields', 'created', 'last_updated',
         )
 
@@ -124,8 +127,8 @@ class ValidationCheckSerializer(NetBoxModelSerializer):
     class Meta:
         model = ValidationCheck
         fields = (
-            'id', 'display', 'name', 'slug', 'description', 'platform',
-            'command', 'regex_match', 'json_path', 'expected_value', 'operator',
+            'id', 'display', 'name', 'description', 'category',
+            'command', 'phase',
             'tags', 'custom_fields', 'created', 'last_updated',
         )
 
@@ -134,6 +137,6 @@ class CheckTemplateSerializer(NetBoxModelSerializer):
     class Meta:
         model = CheckTemplate
         fields = (
-            'id', 'display', 'name', 'slug', 'description', 'checks',
+            'id', 'display', 'name', 'description', 'checks',
             'tags', 'custom_fields', 'created', 'last_updated',
         )
