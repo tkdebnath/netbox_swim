@@ -11,12 +11,14 @@ from .models import (
 
 class HardwareGroupTable(NetBoxTable):
     name = tables.Column(linkify=True)
-    deployment_mode = ChoiceFieldColumn() # Added this line
+    deployment_mode = ChoiceFieldColumn()
+    platforms = columns.ManyToManyColumn(linkify_item=True)
+    device_types = columns.ManyToManyColumn(linkify_item=True)
 
-    class Meta(NetBoxTable.Meta): # Changed from NetBoxTable.Meta to Meta
-        model = HardwareGroup # Changed from HardwareGroup to models.HardwareGroup
-        fields = ('pk', 'id', 'name', 'slug', 'deployment_mode', 'min_version', 'max_version', 'description', 'created', 'last_updated') # Added 'deployment_mode' after 'slug'
-        default_columns = ('name', 'deployment_mode', 'min_version', 'max_version', 'description') # Added 'deployment_mode' after 'name'
+    class Meta(NetBoxTable.Meta):
+        model = HardwareGroup
+        fields = ('pk', 'id', 'name', 'slug', 'platforms', 'device_types', 'deployment_mode', 'min_version', 'max_version', 'description', 'created', 'last_updated')
+        default_columns = ('name', 'platforms', 'device_types', 'deployment_mode', 'min_version', 'max_version', 'description')
 
 
 class FileServerTable(NetBoxTable):
