@@ -242,7 +242,7 @@ class DeviceSyncRecordFilterSet(NetBoxModelFilterSet):
     platform_ic = django_filters.CharFilter(field_name='device__platform__name', lookup_expr='icontains', label='Platform (IC)')
 
     status = django_filters.MultipleChoiceFilter(
-        choices=DeviceSyncRecord.StatusChoices.choices,
+        choices=[(k, v) for k, v, *c in DeviceSyncRecord.StatusChoices.CHOICES],
     )
 
     class Meta:
