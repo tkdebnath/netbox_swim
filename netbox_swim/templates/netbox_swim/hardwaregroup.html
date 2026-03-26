@@ -21,6 +21,20 @@
                         <td>{{ object.get_deployment_mode_display }}</td>
                     </tr>
                     <tr>
+                        <th scope="row">Workflow Template</th>
+                        <td>
+                            {% if object.workflow_template %}
+                                <a href="{{ object.workflow_template.get_absolute_url }}">{{ object.workflow_template }}</a>
+                            {% else %}
+                                <span class="text-muted">None assigned</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Connection Priority</th>
+                        <td><code>{{ object.connection_priority }}</code></td>
+                    </tr>
+                    <tr>
                         <th scope="row">Version Range</th>
                         <td>
                             {% if object.min_version or object.max_version %}
