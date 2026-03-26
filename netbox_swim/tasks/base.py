@@ -50,8 +50,14 @@ class UpgradeTask:
             hw_group = getattr(target_image, 'hardware_groups', None)
             if hw_group and hw_group.exists():
                 grp = hw_group.first()
-                if isinstance(grp.extra_config, dict) and 'swim_boot_drive' in grp.extra_config:
-                    return grp.extra_config['swim_boot_drive']
+                
+                grp_extra = getattr(grp, 'extra_config', None)
+                if isinstance(grp_extra, dict) and 'swim_boot_drive' in grp_extra:
+                    return grp_extra['swim_boot_drive']
+                    
+                grp_cf = getattr(grp, 'custom_field_data', None)
+                if isinstance(grp_cf, dict) and 'swim_boot_drive' in grp_cf:
+                    return grp_cf['swim_boot_drive']
 
         model = getattr(getattr(device, 'device_type', None), 'model', '').upper()
         platform_slug = getattr(getattr(device, 'platform', None), 'slug', '').lower()
