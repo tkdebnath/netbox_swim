@@ -417,9 +417,12 @@ class SyncCiscoIosDeviceScrapli(ScrapliTask, CiscoSyncLogicMixin):
                     parser_ver
                 )
         except Exception as e:
+            import traceback as _tb
+            frames = _tb.extract_tb(e.__traceback__)
+            loc = f"{frames[-1].filename.split('/')[-1]}:{frames[-1].lineno}" if frames else 'unknown'
             msg = (
-                f"[Scrapli] Connection to {device.name} ({host}:22) FAILED: "
-                f"{type(e).__name__}: {e}"
+                f"[Scrapli] Connection to {device.name} ({host}:22) FAILED "
+                f"at {loc}: {type(e).__name__}: {e}"
             )
             return [("error", msg)]
 
@@ -468,9 +471,12 @@ class SyncCiscoIosDeviceNetmiko(NetmikoTask, CiscoSyncLogicMixin):
                     device, golden_schema, auto_update, str(response_ver), parser_ver
                 )
         except Exception as e:
+            import traceback as _tb
+            frames = _tb.extract_tb(e.__traceback__)
+            loc = f"{frames[-1].filename.split('/')[-1]}:{frames[-1].lineno}" if frames else 'unknown'
             msg = (
-                f"[Netmiko] Connection to {device.name} ({host}:22) FAILED: "
-                f"{type(e).__name__}: {e}"
+                f"[Netmiko] Connection to {device.name} ({host}:22) FAILED "
+                f"at {loc}: {type(e).__name__}: {e}"
             )
             return [("error", msg)]
 
@@ -518,8 +524,11 @@ class SyncCiscoIosDeviceUnicon(UniconTask, CiscoSyncLogicMixin):
                     device, golden_schema, auto_update, str(response_ver), parser_ver
                 )
         except Exception as e:
+            import traceback as _tb
+            frames = _tb.extract_tb(e.__traceback__)
+            loc = f"{frames[-1].filename.split('/')[-1]}:{frames[-1].lineno}" if frames else 'unknown'
             msg = (
-                f"[Unicon] Connection to {device.name} ({host}:22) FAILED: "
-                f"{type(e).__name__}: {e}"
+                f"[Unicon] Connection to {device.name} ({host}:22) FAILED "
+                f"at {loc}: {type(e).__name__}: {e}"
             )
             return [("error", msg)]

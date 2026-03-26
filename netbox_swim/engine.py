@@ -53,7 +53,13 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
 
     # User Request: Must have an explicit IPv4/IPv6 assigned.
     if not device.primary_ip:
-        msg = f"Device {device.name} has no Primary IP — sync aborted. Assign a Primary IP in NetBox first."
+        import inspect as _inspect
+        _lineno = _inspect.currentframe().f_lineno + 1
+        msg = (
+            f"[engine.py:{_lineno}] Criteria NOT met: Device '{device.name}' has no Primary IP assigned. "
+            f"Connection was NOT initiated. "
+            f"Fix: NetBox → Devices → {device.name} → set a Primary IPv4/IPv6."
+        )
         logger.error(msg)
         DeviceSyncRecord.objects.create(
             device=device,
@@ -79,10 +85,17 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
             task = SyncCiscoIosDeviceScrapli()  # default
 
     if task is None:
+        import inspect as _inspect
+        _frame = _inspect.currentframe()
+        _loc = f"engine.py:{_frame.f_lineno}" if _frame else "engine.py"
         msg = (
-            f"No sync task matched for platform slug='{platform_slug}' / name='{platform_name}'. "
-            f"Supported keywords: {CISCO_KEYWORDS}. "
-            f"Fix: Go to NetBox → Platform → edit this platform's slug so it contains one of the keywords above."
+            f"[{_loc}] Connection NOT initiated — platform criteria did not match. "
+            f"Device: '{device.name}' | "
+            f"Platform slug found: '{platform_slug}' | "
+            f"Platform name found: '{platform_name}' | "
+            f"Required: slug or name must contain one of {list(CISCO_KEYWORDS)}. "
+            f"Fix: NetBox \u2192 Platforms \u2192 edit '{platform_name or platform_slug}' "
+            f"\u2192 change slug to include e.g. 'cisco', 'ios', 'nxos', 'catalyst'."
         )
         logger.error(f"[{device.name}] {msg}")
         DeviceSyncRecord.objects.create(
@@ -92,6 +105,7 @@ def _sync_device_logic(device_id, auto_update=False, connection_library='scrapli
             log_messages=[f"[ABORTED] {msg}"]
         )
         return [("aborted", msg)]
+
         
     # 2. Execute the Sync Task
     try:
