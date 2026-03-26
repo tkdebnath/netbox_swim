@@ -9,6 +9,7 @@ Usage:
 """
 
 import os
+import re
 import requests
 
 BASE_URL = os.environ.get("NETBOX_URL", "http://localhost:8000").rstrip("/")
@@ -16,17 +17,22 @@ TOKEN = os.environ.get("NETBOX_TOKEN", "")
 HEADERS = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"}
 
 
-def add_device(name, device_type_slug, site_slug, platform_slug, role_slug,
+def slugify(text):
+    """Convert any text to a URL-safe slug. e.g. 'Catalyst 9300-48P' -> 'catalyst-9300-48p'"""
+    return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+
+def add_device(name, device_type, site, platform, role,
                ip_address, serial="", software_version="", deployment_mode="campus"):
-    """Add a device and assign a primary IP."""
+    """Add a device and assign a primary IP. Pass names or slugs — slugs are auto-generated."""
 
     # 1. Create the device
     device_payload = {
         "name": name,
-        "device_type": {"slug": device_type_slug},
-        "site": {"slug": site_slug},
-        "platform": {"slug": platform_slug},
-        "role": {"slug": role_slug},
+        "device_type": {"slug": slugify(device_type)},
+        "site": {"slug": slugify(site)},
+        "platform": {"slug": slugify(platform)},
+        "role": {"slug": slugify(role)},
         "status": "active",
         "serial": serial,
         "custom_fields": {
@@ -93,12 +99,13 @@ def add_device(name, device_type_slug, site_slug, platform_slug, role_slug,
 # Example: Add a device
 # ============================================================
 if __name__ == "__main__":
+    # Just pass friendly names — slugs are auto-generated
     add_device(
         name="LAB-SW-01",
-        device_type_slug="c9300-48p",
-        site_slug="san-jose-hq",
-        platform_slug="cisco-ios-xe",
-        role_slug="campus-core",
+        device_type="Catalyst 9300-48P",
+        site="San Jose HQ",
+        platform="Cisco IOS-XE",
+        role="Campus Core",
         ip_address="10.1.1.100/24",
         serial="FCW2401X001",
         software_version="17.06.05",
